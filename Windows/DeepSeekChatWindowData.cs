@@ -40,7 +40,21 @@ namespace DeepSeek_v4_for_VisualStudio.Windows
         public bool IsGenerating
         {
             get => _isGenerating;
-            set => SetProperty(ref _isGenerating, value);
+            set
+            {
+                if (SetProperty(ref _isGenerating, value))
+                {
+                    CanSend = !value;
+                }
+            }
+        }
+
+        private bool _canSend = true;
+        [DataMember]
+        public bool CanSend
+        {
+            get => _canSend;
+            private set => SetProperty(ref _canSend, value);
         }
 
         private string _statusText = string.Empty;
@@ -296,6 +310,14 @@ namespace DeepSeek_v4_for_VisualStudio.Windows
         // ─── 命令实现 ───
         private async Task SendMessageAsync(object? parameter, CancellationToken cancellationToken)
         {
+            // AI 正在生成回复时，禁止继续提问
+            if (IsGenerating)
+            {
+                Logger.Info("发送被忽略：AI 正在生成回复中");
+                StatusText = "AI 正在回复中，请等待或点击停止按钮…";
+                return;
+            }
+
             await InitializeApiServiceAsync(); // 热重载 API 服务
 
             var userText = InputText?.Trim();
@@ -340,25 +362,67 @@ namespace DeepSeek_v4_for_VisualStudio.Windows
                 var requestMessages = BuildRequestMessages();
                 Logger.Info($"开始流式请求，模型: {_selectedModel}");
 
+                // 批处理缓冲区：避免每个字符都触发 RPC，大幅减少 UI 线程压力
+                var reasoningBuffer = new System.Text.StringBuilder();
+                int contentCharsSinceScroll = 0;
+                const int ContentScrollInterval = 50;  // 内容每 50 字符触发一次滚动
+                const int ReasoningFlushInterval = 50;  // 思考每 50 字符刷新一次显示
+                var lastIdx = Messages.Count - 1;
+
                 await foreach (var chunk in _apiService.ChatStreamAsync(requestMessages, _currentStreamingCts.Token))
                 {
                     if (chunk.StartsWith("[THINKING]"))
                     {
-                        // 思考内容可单独处理，这里仅记录
-                        StatusText = "DeepSeek 思考中...";
+                        var thinking = chunk.Substring(10);
+                        reasoningBuffer.Append(thinking);
+                        StatusText = "DeepSeek 深度思考中…";
+
+                        // 思考内容每 30 字符刷新一次，展示为滚动的一行
+                        if (reasoningBuffer.Length >= ReasoningFlushInterval)
+                        {
+                            assistantMessage.ReasoningContent = reasoningBuffer.ToString();
+                            reasoningBuffer.Clear();
+
+                            // 思考面板更新时触发滚动
+                            SelectedMessageIndex = -1;
+                            await Task.Yield();
+                            SelectedMessageIndex = lastIdx;
+                        }
                     }
                     else
                     {
-                        // 因为命令在主线程执行，这里可以直接更新 UI 属性
+                        // 先刷新思考缓冲区残留（思考结束后可能留有未刷新的内容）
+                        if (reasoningBuffer.Length > 0)
+                        {
+                            assistantMessage.ReasoningContent += reasoningBuffer.ToString();
+                            reasoningBuffer.Clear();
+                        }
+
+                        // 内容实时更新（每个 chunk 都更新，保证流式体验）
                         assistantMessage.Content += chunk;
+                        contentCharsSinceScroll += chunk.Length;
                         StatusText = "DeepSeek 回复中...";
-                        // 流式更新时强制 ListBox 重新滚动到最新消息
-                        // 先设为 -1 再设回以触发 SelectionChanged → ScrollIntoView
-                        var lastIdx = Messages.Count - 1;
-                        SelectedMessageIndex = -1;
-                        SelectedMessageIndex = lastIdx;
+
+                        // 滚动批处理：每 ~50 字符才触发一次 ListBox.ScrollIntoView
+                        // 避免每个字符都发送 RPC 导致 UI 通道拥塞
+                        if (contentCharsSinceScroll >= ContentScrollInterval)
+                        {
+                            contentCharsSinceScroll = 0;
+                            SelectedMessageIndex = -1;
+                            await Task.Yield();
+                            SelectedMessageIndex = lastIdx;
+                        }
                     }
                 }
+
+                // 流式结束：刷新思考缓冲区残留 + 最终滚动到底部
+                if (reasoningBuffer.Length > 0)
+                {
+                    assistantMessage.ReasoningContent += reasoningBuffer.ToString();
+                }
+                SelectedMessageIndex = -1;
+                await Task.Yield();
+                SelectedMessageIndex = lastIdx;
 
                 Logger.Info($"流式回复完成，总长度: {assistantMessage.Content.Length} 字符");
                 Logger.Info($"内容为: {assistantMessage.Content}");

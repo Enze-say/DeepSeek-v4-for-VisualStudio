@@ -30,11 +30,35 @@ namespace DeepSeek_v4_for_VisualStudio.Windows
                 if ((bool)e.NewValue)
                 {
                     scrollViewer.ScrollChanged += ScrollViewer_ScrollChanged;
+
+                    // 如果 ScrollViewer 已加载完成，立即滚动到底部；
+                    // 否则等待 Loaded 事件（处理初始加载历史消息的场景）
+                    if (scrollViewer.IsLoaded)
+                    {
+                        scrollViewer.ScrollToBottom();
+                    }
+                    else
+                    {
+                        scrollViewer.Loaded += OnScrollViewerLoaded;
+                    }
                 }
                 else
                 {
                     scrollViewer.ScrollChanged -= ScrollViewer_ScrollChanged;
+                    scrollViewer.Loaded -= OnScrollViewerLoaded;
                 }
+            }
+        }
+
+        private static void OnScrollViewerLoaded(object sender, RoutedEventArgs e)
+        {
+            if (sender is ScrollViewer scrollViewer)
+            {
+                scrollViewer.Loaded -= OnScrollViewerLoaded;
+                // 延迟到下一个布局 pass，确保 ItemsControl 已完成布局测量
+                scrollViewer.Dispatcher.BeginInvoke(
+                    new Action(() => scrollViewer.ScrollToBottom()),
+                    System.Windows.Threading.DispatcherPriority.Loaded);
             }
         }
 

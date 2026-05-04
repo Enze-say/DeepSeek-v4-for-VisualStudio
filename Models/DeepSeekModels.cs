@@ -126,6 +126,7 @@ namespace DeepSeek_v4_for_VisualStudio.Models
     {
         private string _role = "user";
         private string _content = string.Empty;
+        private string _reasoningContent = string.Empty;
         private DateTime _timestamp = DateTime.Now;
         private bool _isStreaming;
 
@@ -141,6 +142,17 @@ namespace DeepSeek_v4_for_VisualStudio.Models
         {
             get => _content;
             set => SetProperty(ref _content, value);
+        }
+
+        /// <summary>
+        /// 思考模式下的推理过程内容，以单行滚动形式展示。
+        /// 非思考模式下此属性为空。
+        /// </summary>
+        [DataMember]
+        public string ReasoningContent
+        {
+            get => _reasoningContent;
+            set => SetProperty(ref _reasoningContent, value);
         }
 
         [DataMember]

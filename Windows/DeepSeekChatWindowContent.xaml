@@ -20,6 +20,18 @@
                 <Setter Property="Foreground" Value="#D4D4D4" />
                 <Setter Property="BorderBrush" Value="#555555" />
                 <Setter Property="BorderThickness" Value="1" />
+                <Style.Triggers>
+                    <!-- 禁用状态：半透明 + 文字变灰，视觉上更柔和 -->
+                    <Trigger Property="IsEnabled" Value="False">
+                        <Setter Property="Opacity" Value="0.4" />
+                        <Setter Property="Foreground" Value="#888888" />
+                    </Trigger>
+                    <!-- 鼠标悬停（仅启用时生效，因为禁用时 IsMouseOver 不触发） -->
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="Background" Value="#4A4A4A" />
+                        <Setter Property="BorderBrush" Value="#6CAFD9" />
+                    </Trigger>
+                </Style.Triggers>
             </Style>
             <Style TargetType="ComboBox">
                 <Setter Property="Background" Value="#2D2D2D" />
@@ -165,7 +177,6 @@
                 <Setter Property="CornerRadius" Value="8" />
                 <Setter Property="Padding" Value="12,10" />
                 <Setter Property="Margin" Value="48,6,12,6" />
-                <Setter Property="MaxWidth" Value="520" />
                 <Setter Property="HorizontalAlignment" Value="Right" />
             </Style>
 
@@ -177,7 +188,6 @@
                 <Setter Property="CornerRadius" Value="8" />
                 <Setter Property="Padding" Value="12,10" />
                 <Setter Property="Margin" Value="12,6,48,6" />
-                <Setter Property="MaxWidth" Value="520" />
                 <Setter Property="HorizontalAlignment" Value="Left" />
             </Style>
 
@@ -189,12 +199,24 @@
                 <Setter Property="Foreground" Value="#888888" />
             </Style>
 
-            <!-- 消息文本 -->
+            <!-- 消息文本（可选中复制） -->
             <Style x:Key="MsgTextStyle" TargetType="TextBlock">
                 <Setter Property="TextWrapping" Value="Wrap" />
                 <Setter Property="FontSize" Value="13" />
                 <Setter Property="LineHeight" Value="20" />
                 <Setter Property="Foreground" Value="#D4D4D4" />
+            </Style>
+
+            <!-- 消息文本框（只读，支持选中复制 Ctrl+C） -->
+            <Style x:Key="MsgTextBoxStyle" TargetType="TextBox">
+                <Setter Property="IsReadOnly" Value="True" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+                <Setter Property="FontSize" Value="13" />
+                <Setter Property="Foreground" Value="#D4D4D4" />
+                <Setter Property="CaretBrush" Value="#D4D4D4" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Padding" Value="0" />
             </Style>
 
             <!-- 状态栏文本 -->
@@ -261,6 +283,19 @@
                                                        Foreground="#6CAFD9"
                                                        FontSize="10" Visibility="Collapsed" />
                                         </StackPanel>
+                                        <!-- 思考过程（单行滚动显示最新推理内容，每30字符刷新） -->
+                                        <Border x:Name="ReasoningPanel"
+                                                Background="#1E1E2E"
+                                                CornerRadius="4"
+                                                Padding="8,4" Margin="0,0,0,6"
+                                                Visibility="Visible">
+                                            <TextBlock x:Name="ReasoningText"
+                                                       Text="{Binding ReasoningContent}"
+                                                       TextTrimming="CharacterEllipsis"
+                                                       Foreground="#8A8A9A"
+                                                       FontSize="11" FontStyle="Italic"
+                                                       ToolTip="{Binding ReasoningContent}" />
+                                        </Border>
                                         <TextBlock Text="{Binding Content}" Style="{StaticResource MsgTextStyle}" />
                                     </StackPanel>
                                 </Border>
@@ -275,6 +310,13 @@
                                 </DataTrigger>
                                 <DataTrigger Binding="{Binding IsStreaming}" Value="True">
                                     <Setter TargetName="StreamingDots" Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                                <!-- 思考面板：内容为空时隐藏 -->
+                                <DataTrigger Binding="{Binding ReasoningContent}" Value="">
+                                    <Setter TargetName="ReasoningPanel" Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding ReasoningContent}" Value="{x:Null}">
+                                    <Setter TargetName="ReasoningPanel" Property="Visibility" Value="Collapsed" />
                                 </DataTrigger>
                             </DataTemplate.Triggers>
                         </DataTemplate>
@@ -303,7 +345,8 @@
                              MinHeight="50" MaxHeight="140"
                              Background="Transparent" BorderThickness="0"
                              VerticalScrollBarVisibility="Auto"
-                             VerticalContentAlignment="Top" Padding="4">
+                             VerticalContentAlignment="Top" Padding="4"
+                             IsReadOnly="{Binding IsGenerating}">
                         <TextBox.InputBindings>
                             <KeyBinding Key="Enter" Command="{Binding SendCommand}" />
                         </TextBox.InputBindings>
@@ -338,10 +381,10 @@
 
                         <!-- Right Toolbar -->
                         <StackPanel Grid.Column="2" Orientation="Horizontal">
-                            <Button Content="清空" Command="{Binding ClearCommand}" ToolTip="清空对话" Background="Transparent" BorderThickness="0" Margin="0,0,4,0" />
+                            <Button Content="清空" Command="{Binding ClearCommand}" ToolTip="清空对话" Background="Transparent" BorderThickness="0" Margin="0,0,4,0" IsEnabled="{Binding CanSend}" />
                             <Button Content="停止" Command="{Binding StopCommand}" ToolTip="停止生成" Background="Transparent" BorderThickness="0" Margin="0,0,4,0" />
                             <Button Content="⚙" Command="{Binding OpenConfigCommand}" ToolTip="配置 API 密钥" Background="Transparent" BorderThickness="0" Margin="0,0,4,0" FontSize="14" />
-                            <Button Content="➤" Command="{Binding SendCommand}" ToolTip="发送 (Enter)" Background="Transparent" BorderThickness="0" Foreground="#6CAFD9" FontSize="14" Padding="8,0" />
+                            <Button Content="➤" Command="{Binding SendCommand}" ToolTip="发送 (Enter)" Background="Transparent" BorderThickness="0" Foreground="#6CAFD9" FontSize="14" Padding="8,0" IsEnabled="{Binding CanSend}" />
                         </StackPanel>
                     </Grid>
                 </Grid>
