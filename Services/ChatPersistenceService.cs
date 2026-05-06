@@ -7,14 +7,13 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using System.Threading.Tasks;
 
 namespace DeepSeek_v4_for_VisualStudio.Services
 {
     /// <summary>
-    /// 对话持久化服务 — 按项目保存/加载聊天记录。
+    /// 对话持久化服务 — 按项目保存/加载多轮对话会话。
     /// 文件存储在 %LocalAppData%\DeepSeekVS\conversations\ 下，
-    /// 以解决方案路径的哈希值作为文件名，实现每个项目独立的对话历史。
+    /// 以解决方案路径的哈希值作为文件名，每个文件包含该项目的所有会话。
     /// </summary>
     internal static class ChatPersistenceService
     {
@@ -47,69 +46,13 @@ namespace DeepSeek_v4_for_VisualStudio.Services
             }
         }
 
-        /// <summary>
-        /// 保存消息列表到文件。
-        /// </summary>
-        public static async Task SaveAsync(string? solutionPath, IReadOnlyList<ChatMessage> messages)
-        {
-            if (messages == null) return;
-
-            var filePath = GetStoragePath(solutionPath);
-
-            try
-            {
-                var dto = new ConversationDto
-                {
-                    SolutionPath = solutionPath ?? "(unsaved)",
-                    LastSaved = DateTime.Now,
-                    Messages = messages.ToList(),
-                };
-
-                var json = JsonSerializer.Serialize(dto, JsonOptions);
-                using (var writer = new StreamWriter(filePath, false, Encoding.UTF8))
-                {
-                    await writer.WriteAsync(json);
-                }
-                Logger.Info($"对话已保存 ({messages.Count} 条消息) → {Path.GetFileName(filePath)}");
-            }
-            catch (Exception ex)
-            {
-                Logger.Error("保存对话失败", ex);
-            }
-        }
+        #region Public Methods - Session Level
 
         /// <summary>
-        /// 同步保存（用于 Dispose 等不能使用 async 的场景）。
+        /// 加载指定解决方案的所有会话。如果文件不存在或为空，返回空容器。
+        /// 自动兼容旧版单对话格式（自动迁移到多会话格式）。
         /// </summary>
-        public static void Save(string? solutionPath, IReadOnlyList<ChatMessage> messages)
-        {
-            if (messages == null) return;
-
-            var filePath = GetStoragePath(solutionPath);
-
-            try
-            {
-                var dto = new ConversationDto
-                {
-                    SolutionPath = solutionPath ?? "(unsaved)",
-                    LastSaved = DateTime.Now,
-                    Messages = messages.ToList(),
-                };
-
-                var json = JsonSerializer.Serialize(dto, JsonOptions);
-                File.WriteAllText(filePath, json, Encoding.UTF8);
-                Logger.Info($"对话已保存 ({messages.Count} 条消息) → {Path.GetFileName(filePath)}");
-            }
-            catch (Exception ex)
-            {
-                Logger.Error("保存对话失败", ex);
-            }
-        }
-
-        /// <summary>
-        /// 从文件加载消息列表。如果文件不存在或损坏，返回 null。
-        /// </summary>
-        public static List<ChatMessage>? Load(string? solutionPath)
+        public static SessionsContainer LoadSessions(string? solutionPath)
         {
             var filePath = GetStoragePath(solutionPath);
 
@@ -117,39 +60,94 @@ namespace DeepSeek_v4_for_VisualStudio.Services
             {
                 if (!File.Exists(filePath))
                 {
-                    Logger.Info($"对话文件不存在: {Path.GetFileName(filePath)}");
-                    return null;
+                    Logger.Info($"会话文件不存在，创建空容器: {Path.GetFileName(filePath)}");
+                    return new SessionsContainer { SolutionPath = solutionPath ?? "(unsaved)" };
                 }
 
                 var json = File.ReadAllText(filePath, Encoding.UTF8);
-                var dto = JsonSerializer.Deserialize<ConversationDto>(json, JsonOptions);
 
-                if (dto?.Messages == null || dto.Messages.Count == 0)
+                // 先尝试新格式（多会话）
+                try
                 {
-                    Logger.Info($"对话文件为空: {Path.GetFileName(filePath)}");
-                    return null;
+                    var container = JsonSerializer.Deserialize<SessionsContainer>(json, JsonOptions);
+                    if (container != null)
+                    {
+                        // 确保所有会话的消息都不是 Streaming 状态
+                        foreach (var session in container.Sessions)
+                        {
+                            foreach (var msg in session.Messages)
+                                msg.IsStreaming = false;
+                        }
+                        Logger.Info($"已加载 {container.Sessions.Count} 个会话 ← {Path.GetFileName(filePath)}");
+                        return container;
+                    }
+                }
+                catch { /* 不是新格式，尝试旧格式迁移 */ }
+
+                // 回退：尝试旧版单对话格式并迁移
+                var legacyDto = JsonSerializer.Deserialize<LegacyConversationDto>(json, JsonOptions);
+                if (legacyDto?.Messages != null && legacyDto.Messages.Count > 0)
+                {
+                    foreach (var msg in legacyDto.Messages)
+                        msg.IsStreaming = false;
+
+                    var migratedContainer = new SessionsContainer
+                    {
+                        SolutionPath = solutionPath ?? "(unsaved)",
+                        Sessions = new List<ChatSession>
+                        {
+                            new ChatSession
+                            {
+                                Id = "legacy-migrated",
+                                Title = "历史对话",
+                                Messages = legacyDto.Messages,
+                                CreatedAt = DateTime.Now,
+                                LastActiveAt = DateTime.Now,
+                            },
+                        },
+                        ActiveSessionId = "legacy-migrated",
+                    };
+
+                    Logger.Info($"旧版对话已迁移 ({legacyDto.Messages.Count} 条消息)");
+                    SaveSessions(solutionPath, migratedContainer);
+                    return migratedContainer;
                 }
 
-                // 确保加载的消息都不是 Streaming 状态
-                foreach (var msg in dto.Messages)
-                {
-                    msg.IsStreaming = false;
-                }
-
-                Logger.Info($"对话已加载 ({dto.Messages.Count} 条消息) ← {Path.GetFileName(filePath)}");
-                return dto.Messages;
+                return new SessionsContainer { SolutionPath = solutionPath ?? "(unsaved)" };
             }
             catch (Exception ex)
             {
-                Logger.Error($"加载对话失败: {Path.GetFileName(filePath)}", ex);
-                return null;
+                Logger.Error($"加载会话失败: {Path.GetFileName(filePath)}", ex);
+                return new SessionsContainer { SolutionPath = solutionPath ?? "(unsaved)" };
             }
         }
 
         /// <summary>
-        /// 删除指定项目的对话文件。
+        /// 保存所有会话到文件。
         /// </summary>
-        public static void Delete(string? solutionPath)
+        public static void SaveSessions(string? solutionPath, SessionsContainer container)
+        {
+            if (container == null) return;
+
+            var filePath = GetStoragePath(solutionPath);
+            container.LastSaved = DateTime.Now;
+
+            try
+            {
+                var json = JsonSerializer.Serialize(container, JsonOptions);
+                File.WriteAllText(filePath, json, Encoding.UTF8);
+                Logger.Info($"会话已保存 ({container.Sessions.Count} 个会话) → {Path.GetFileName(filePath)}");
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("保存会话失败", ex);
+            }
+        }
+
+        /// <summary>
+        /// 删除指定会话文件（整个项目的所有会话）。
+        /// </summary>
+        public static void DeleteAllSessions(string? solutionPath)
         {
             var filePath = GetStoragePath(solutionPath);
             try
@@ -157,18 +155,74 @@ namespace DeepSeek_v4_for_VisualStudio.Services
                 if (File.Exists(filePath))
                 {
                     File.Delete(filePath);
-                    Logger.Info($"对话文件已删除: {Path.GetFileName(filePath)}");
+                    Logger.Info($"会话文件已删除: {Path.GetFileName(filePath)}");
                 }
             }
             catch (Exception ex)
             {
-                Logger.Error("删除对话文件失败", ex);
+                Logger.Error("删除会话文件失败", ex);
             }
         }
 
-        // ─── 内部 DTO ───
+        #endregion
 
-        private class ConversationDto
+        #region Legacy Support (保持向后兼容)
+
+        /// <summary>
+        /// [旧版兼容] 保存单条消息列表（自动包装为单会话容器）。
+        /// </summary>
+        public static void Save(string? solutionPath, IReadOnlyList<ChatMessage> messages)
+        {
+            if (messages == null) return;
+
+            var container = LoadSessions(solutionPath);
+            var defaultSession = container.Sessions.FirstOrDefault(s => s.Id == container.ActiveSessionId)
+                ?? container.Sessions.FirstOrDefault();
+
+            if (defaultSession != null)
+            {
+                defaultSession.Messages = messages.ToList();
+                defaultSession.LastActiveAt = DateTime.Now;
+            }
+            else
+            {
+                container.Sessions.Add(new ChatSession
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    Title = "对话",
+                    Messages = messages.ToList(),
+                });
+                container.ActiveSessionId = container.Sessions[0].Id;
+            }
+
+            SaveSessions(solutionPath, container);
+        }
+
+        /// <summary>
+        /// [旧版兼容] 加载消息列表（返回活跃会话的消息，兼容旧调用）。
+        /// </summary>
+        public static List<ChatMessage>? Load(string? solutionPath)
+        {
+            var container = LoadSessions(solutionPath);
+            var activeSession = container.Sessions.FirstOrDefault(s => s.Id == container.ActiveSessionId)
+                ?? container.Sessions.FirstOrDefault();
+
+            return activeSession?.Messages;
+        }
+
+        /// <summary>
+        /// [旧版兼容] 删除项目的所有会话。
+        /// </summary>
+        public static void Delete(string? solutionPath)
+        {
+            DeleteAllSessions(solutionPath);
+        }
+
+        #endregion
+
+        // ─── 内部 DTO（旧版兼容） ───
+
+        private class LegacyConversationDto
         {
             public string SolutionPath { get; set; } = string.Empty;
             public DateTime LastSaved { get; set; }

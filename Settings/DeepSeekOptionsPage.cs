@@ -49,6 +49,29 @@ namespace DeepSeek_v4_for_VisualStudio.Settings
         [TypeConverter(typeof(ReasoningEffortConverter))]
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)] // Fix for WFO1000
         public string ReasoningEffort { get; set; } = "high";
+
+        [Category("Web Search")]
+        [DisplayName("Enable Web Search")]
+        [Description("启用联网搜索功能。启用后可在聊天窗口中使用联网搜索开关。")]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
+        public bool EnableWebSearch { get; set; } = true;
+
+        [Category("Web Search")]
+        [DisplayName("Search Provider")]
+        [Description("选择搜索引擎: Baidu (百度千帆, 需 API Key, 每月1500次免费) 或 DuckDuckGo (完全免费)")]
+        [TypeConverter(typeof(SearchProviderConverter))]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
+        public string SearchProvider { get; set; } = "DuckDuckGo";
+
+        [Category("Web Search")]
+        [DisplayName("Baidu Qianfan API Key")]
+        [Description("百度千帆 AppBuilder API Key。获取地址: https://console.bce.baidu.com/ai_apaas/accessKey\n" +
+                     "⚠️ 计费提醒: 每月免费 1500 次（约每天 50 次），超出后按量后付费。\n" +
+                     "免费额度耗尽后会自动切换至 DuckDuckGo。\n" +
+                     "开通后付费: https://console.bce.baidu.com/ai_apaas/resource\n" +
+                     "计费详情: https://cloud.baidu.com/doc/qianfan/s/Mmh4sv6ec")]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
+        public string BaiduApiKey { get; set; } = string.Empty;
     }
 
     /// <summary>
@@ -69,5 +92,15 @@ namespace DeepSeek_v4_for_VisualStudio.Settings
         public override bool GetStandardValuesSupported(ITypeDescriptorContext? context) => true;
         public override StandardValuesCollection GetStandardValues(ITypeDescriptorContext? context)
             => new(new[] { "high", "max" });
+    }
+
+    /// <summary>
+    /// 搜索提供商下拉选项。
+    /// </summary>
+    internal class SearchProviderConverter : StringConverter
+    {
+        public override bool GetStandardValuesSupported(ITypeDescriptorContext? context) => true;
+        public override StandardValuesCollection GetStandardValues(ITypeDescriptorContext? context)
+            => new(new[] { "Baidu", "DuckDuckGo" });
     }
 }

@@ -27,6 +27,11 @@ namespace DeepSeek_v4_for_VisualStudio.Models
         [JsonPropertyName("reasoning_effort")]
         public string? ReasoningEffort { get; set; }
 
+        // 最大输出 token 数（用于校验 ping）
+        [JsonPropertyName("max_tokens")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public int? MaxTokens { get; set; }
+
         // 注意: 思考模式下 temperature/top_p 等参数不生效，此处省略
     }
 
@@ -221,5 +226,70 @@ namespace DeepSeek_v4_for_VisualStudio.Models
             OnPropertyChanged(propertyName);
             return true;
         }
+    }
+
+    // ======== 会话模型（多轮对话支持） ========
+
+    /// <summary>
+    /// 表示一次对话会话，包含多条消息和元数据。
+    /// 会话标题默认为"新对话"，在用户发送第一条消息时自动更新。
+    /// </summary>
+    [DataContract]
+    public class ChatSession
+    {
+        [DataMember]
+        public string Id { get; set; } = Guid.NewGuid().ToString("N");
+
+        [DataMember]
+        public string Title { get; set; } = "新对话";
+
+        [DataMember]
+        public List<ChatMessage> Messages { get; set; } = new();
+
+        [DataMember]
+        public DateTime CreatedAt { get; set; } = DateTime.Now;
+
+        [DataMember]
+        public DateTime LastActiveAt { get; set; } = DateTime.Now;
+    }
+
+    /// <summary>
+    /// 持久化用的会话容器，存储一个解决方案下的所有会话。
+    /// </summary>
+    [DataContract]
+    internal class SessionsContainer
+    {
+        [DataMember]
+        public string SolutionPath { get; set; } = string.Empty;
+
+        [DataMember]
+        public DateTime LastSaved { get; set; }
+
+        [DataMember]
+        public List<ChatSession> Sessions { get; set; } = new();
+
+        [DataMember]
+        public string? ActiveSessionId { get; set; }
+    }
+
+    // ======== 搜索查询优化模型 ========
+
+    /// <summary>
+    /// AI 返回的搜索查询优化结果。由 AI 分析用户问题和上下文后生成。
+    /// 必须严格校验 JSON 格式。
+    /// </summary>
+    public class SearchQueryOptimization
+    {
+        /// <summary>优化后的搜索关键词（必填，不超过72字符）</summary>
+        [JsonPropertyName("search_query")]
+        public string SearchQuery { get; set; } = string.Empty;
+
+        /// <summary>搜索时效过滤（可选）: week/month/semiyear/year</summary>
+        [JsonPropertyName("search_recency")]
+        public string? SearchRecency { get; set; }
+
+        /// <summary>是否需要联网搜索</summary>
+        [JsonPropertyName("need_search")]
+        public bool NeedSearch { get; set; } = true;
     }
 }

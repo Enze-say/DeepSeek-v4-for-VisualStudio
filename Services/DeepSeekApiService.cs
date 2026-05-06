@@ -109,8 +109,138 @@ namespace DeepSeek_v4_for_VisualStudio.Services
                     yield return $"[THINKING]{reasoning}";
 
                 if (!string.IsNullOrEmpty(content))
-                    yield return content;
+                    yield return content!;
             }
+        }
+
+        /// <summary>
+        /// 非流式调用 API，用于搜索查询优化等需要快速完整响应的场景。
+        /// </summary>
+        /// <param name="messages">消息列表</param>
+        /// <param name="cancellationToken">取消令牌</param>
+        /// <returns>AI 返回的完整文本内容</returns>
+        public async Task<string> CompleteAsync(
+            IEnumerable<ChatApiMessage> messages,
+            CancellationToken cancellationToken = default)
+        {
+            var request = new DeepSeekChatRequest
+            {
+                Model = _model,
+                Messages = new List<ChatApiMessage>(messages),
+                Stream = false,
+                Thinking = new ThinkingControl { Type = "disabled" },
+                ReasoningEffort = null,
+            };
+
+            using var httpRequest = new HttpRequestMessage(HttpMethod.Post, ChatEndpoint)
+            {
+                Content = JsonContent.Create(request, options: new JsonSerializerOptions
+                {
+                    DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+                })
+            };
+
+            using var response = await _httpClient.SendAsync(httpRequest, cancellationToken);
+            await ValidateResponseStatusAsync(response);
+            response.EnsureSuccessStatusCode();
+
+            var responseJson = await response.Content.ReadAsStringAsync();
+            var result = JsonSerializer.Deserialize<DeepSeekChatResponse>(responseJson);
+
+            return result?.Choices?[0]?.Message?.Content ?? string.Empty;
+        }
+
+        /// <summary>
+        /// 验证 API Key 是否有效。发送一个最小请求，检查响应。
+        /// </summary>
+        /// <returns>null 表示有效，否则返回错误描述</returns>
+        public async Task<string?> ValidateApiKeyAsync()
+        {
+            try
+            {
+                var request = new DeepSeekChatRequest
+                {
+                    Model = _model,
+                    Messages = new List<ChatApiMessage>
+                    {
+                        new ChatApiMessage { Role = "user", Content = "hi" }
+                    },
+                    Stream = false,
+                    MaxTokens = 1,
+                    Thinking = new ThinkingControl { Type = "disabled" },
+                };
+
+                using var httpRequest = new HttpRequestMessage(HttpMethod.Post, ChatEndpoint)
+                {
+                    Content = JsonContent.Create(request, options: new JsonSerializerOptions
+                    {
+                        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+                    })
+                };
+
+                using var response = await _httpClient.SendAsync(httpRequest);
+                await ValidateResponseStatusAsync(response);
+                return null; // 有效
+            }
+            catch (ApiKeyInvalidException ex)
+            {
+                return ex.Message;
+            }
+            catch (Exception ex)
+            {
+                return $"API 连接失败: {ex.Message}";
+            }
+        }
+
+        /// <summary>
+        /// 检查 HTTP 响应状态，对认证错误抛出 ApiKeyInvalidException。
+        /// </summary>
+        private static async Task ValidateResponseStatusAsync(HttpResponseMessage response)
+        {
+            if (response.IsSuccessStatusCode) return;
+
+            int statusCode = (int)response.StatusCode;
+            string body = string.Empty;
+            try { body = await response.Content.ReadAsStringAsync(); } catch { }
+
+            if (statusCode == 401 || statusCode == 403)
+            {
+                string detail = ExtractErrorMessage(body);
+                throw new ApiKeyInvalidException(
+                    $"DeepSeek API Key 无效或已过期 (HTTP {statusCode})。\n" +
+                    $"请通过 工具 → 选项 → DeepSeek Chat 重新配置 API Key。\n" +
+                    $"获取 Key: https://platform.deepseek.com/api_keys\n" +
+                    (string.IsNullOrEmpty(detail) ? "" : $"详情: {detail}"));
+            }
+
+            if (statusCode == 429)
+            {
+                throw new ApiKeyInvalidException(
+                    "DeepSeek API 请求频率超限 (HTTP 429)，请稍后重试。");
+            }
+
+            if (statusCode >= 500)
+            {
+                throw new ApiKeyInvalidException(
+                    $"DeepSeek 服务器错误 (HTTP {statusCode})，请稍后重试。\n详情: {body}");
+            }
+        }
+
+        /// <summary>
+        /// 从 API 错误响应中提取可读的错误消息。
+        /// </summary>
+        private static string ExtractErrorMessage(string responseBody)
+        {
+            if (string.IsNullOrWhiteSpace(responseBody)) return string.Empty;
+            try
+            {
+                using var doc = JsonDocument.Parse(responseBody);
+                if (doc.RootElement.TryGetProperty("error", out var error) &&
+                    error.TryGetProperty("message", out var msg))
+                    return msg.GetString() ?? string.Empty;
+            }
+            catch { }
+            return responseBody.Length > 200 ? responseBody.Substring(0, 200) : responseBody;
         }
 
         public void Dispose() => _httpClient?.Dispose();

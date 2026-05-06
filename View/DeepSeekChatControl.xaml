@@ -156,25 +156,54 @@
 
     <Grid Margin="0">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
+        <!-- ═══ 会话选择栏 ═══ -->
+        <Border Grid.Row="0"
+                Background="#252526"
+                BorderBrush="#3C3C3C" BorderThickness="0,0,0,1"
+                Padding="8,6">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <ComboBox Grid.Column="0"
+                          x:Name="SessionComboBox"
+                          MinWidth="160"
+                          SelectionChanged="SessionComboBox_SelectionChanged"
+                          DisplayMemberPath="Title" />
+
+                <Button Grid.Column="1"
+                        x:Name="DeleteSessionButton"
+                        Content="✕"
+                        ToolTip="删除当前对话"
+                        Click="DeleteSessionButton_Click"
+                        Style="{StaticResource TransparentButton}"
+                        FontSize="12" Padding="8,2" Margin="4,0,0,0"
+                        Foreground="#888888" />
+            </Grid>
+        </Border>
+
         <!-- ═══ WebView2 聊天显示区 (Chromium) ═══ -->
-        <wv2:WebView2 Grid.Row="0"
+        <wv2:WebView2 Grid.Row="1"
                       x:Name="ChatWebView"
                       Margin="0" />
 
         <!-- ═══ 状态显示 ═══ -->
-        <TextBlock Grid.Row="1"
+        <TextBlock Grid.Row="2"
                    x:Name="StatusLabel"
                    FontSize="11"
                    Foreground="#888888"
                    Margin="12,4,12,0" />
 
         <!-- ═══ 输入区 ═══ -->
-        <Border Grid.Row="2"
+        <Border Grid.Row="3"
                 Background="#2D2D2D"
                 Margin="8,4,8,12" Padding="4" CornerRadius="6">
             <Grid>
@@ -215,8 +244,12 @@
                                   Checked="ThinkingCheckBox_Changed"
                                   Unchecked="ThinkingCheckBox_Changed" />
                         <ComboBox x:Name="EffortComboBox"
-                                  MinWidth="70"
+                                  MinWidth="70" Margin="0,0,8,0"
                                   SelectionChanged="EffortComboBox_SelectionChanged" />
+                        <ComboBox x:Name="WebSearchEngineComboBox"
+                                  MinWidth="110" Margin="0,0,8,0"
+                                  SelectionChanged="WebSearchEngineComboBox_SelectionChanged"
+                                  ToolTip="选择搜索引擎。百度搜索需在 工具→选项→DeepSeek Chat 中配置 API Key" />
                     </StackPanel>
 
                     <!-- 右侧: 操作按钮 -->

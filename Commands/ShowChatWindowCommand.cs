@@ -51,7 +51,7 @@ namespace DeepSeek_v4_for_VisualStudio.Commands
         /// <summary>
         /// 命令单例。
         /// </summary>
-        public static ShowChatWindowCommand Instance { get; private set; }
+        public static ShowChatWindowCommand? Instance { get; private set; }
 
         /// <summary>
         /// 初始化命令（由 Package.InitializeAsync 调用）。
@@ -60,7 +60,8 @@ namespace DeepSeek_v4_for_VisualStudio.Commands
         {
             await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync(package.DisposalToken);
 
-            var commandService = await package.GetServiceAsync(typeof(IMenuCommandService)) as OleMenuCommandService;
+            var commandService = await package.GetServiceAsync(typeof(IMenuCommandService)) as OleMenuCommandService
+                ?? throw new InvalidOperationException("Failed to get OleMenuCommandService");
             Instance = new ShowChatWindowCommand(package, commandService);
         }
 

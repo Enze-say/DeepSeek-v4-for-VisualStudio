@@ -60,6 +60,19 @@ img{max-width:100%}
 .copy-btn.copied{background:#1A3A1A;color:#4EC9B0}
 .msg-ai{background:#2D2D2D;border-radius:8px;padding:10px 14px;color:#D4D4D4;font-size:13px;line-height:1.5}
 .msg-user{background:#264F78;border-radius:8px;padding:10px 14px;color:#D4D4D4;font-size:13px;line-height:1.5}
+/* ── 联网搜索结果卡片 ── */
+.search-results-card{margin:6px 0 10px 0;border:1px solid #3A5A8A;border-radius:6px;background:#1A2636;overflow:hidden}
+.search-results-card summary{cursor:pointer;padding:6px 12px;color:#7EB8E0;font-size:12px;font-weight:600;background:#253545;user-select:none;list-style:none}
+.search-results-card summary::-webkit-details-marker{display:none}
+.search-results-card summary::before{content:'🌐 ';margin-right:4px}
+.search-results-card summary:hover{color:#A0D0F0}
+.search-results-card .search-result-item{padding:6px 12px;border-bottom:1px solid #2A3A4A}
+.search-results-card .search-result-item:last-child{border-bottom:none}
+.search-results-card .search-result-title{color:#6CAFD9;font-size:12px;font-weight:600;text-decoration:none;display:block;margin-bottom:2px}
+.search-results-card .search-result-title:hover{text-decoration:underline}
+.search-results-card .search-result-url{color:#608B4E;font-size:10px;display:block;margin-bottom:2px;word-break:break-all}
+.search-results-card .search-result-snippet{color:#A0A0A0;font-size:11px;line-height:1.4}
+.search-results-card .search-result-date{color:#707070;font-size:10px;display:block;margin-top:2px}
 .msg-header{font-weight:600;font-size:11px;margin-bottom:4px}
 .msg-header-ai{color:#888}
 .msg-header-user{color:#6CAFD9;text-align:right}
@@ -226,6 +239,65 @@ img{max-width:100%}
         public static string GetDecorateCodeBlocksJsFunction()
         {
             return BuildCodeLangLabelsJs() + BuildCopyBtnJs();
+        }
+
+        /// <summary>
+        /// 构建联网搜索结果的 HTML 卡片（可折叠）。
+        /// 用于在 AI 回复之前展示搜索到的网页结果。
+        /// </summary>
+        /// <param name="results">搜索结果列表</param>
+        /// <param name="providerName">搜索提供商名称（如 "百度搜索"、"DuckDuckGo"）</param>
+        /// <returns>搜索结果卡片的 HTML 字符串</returns>
+        public static string BuildSearchResultsHtml(IReadOnlyList<WebSearchResult> results, string providerName = "联网搜索")
+        {
+            if (results == null || results.Count == 0)
+                return string.Empty;
+
+            var sb = new StringBuilder();
+            sb.Append("<details class='search-results-card' open='true'>");
+            sb.Append($"<summary>🌐 {providerName} ({results.Count} 条结果)</summary>");
+
+            foreach (var result in results)
+            {
+                string escapedTitle = System.Net.WebUtility.HtmlEncode(result.Title ?? string.Empty);
+                string escapedUrl = System.Net.WebUtility.HtmlEncode(result.Url ?? string.Empty);
+                string escapedSnippet = System.Net.WebUtility.HtmlEncode(result.Snippet ?? string.Empty);
+                string escapedDate = System.Net.WebUtility.HtmlEncode(result.Date ?? string.Empty);
+
+                sb.Append("<div class='search-result-item'>");
+                sb.Append($"<a class='search-result-title' href='{escapedUrl}' target='_blank'>{escapedTitle}</a>");
+                sb.Append($"<span class='search-result-url'>{escapedUrl}</span>");
+                sb.Append($"<div class='search-result-snippet'>{escapedSnippet}</div>");
+                if (!string.IsNullOrWhiteSpace(result.Date))
+                    sb.Append($"<span class='search-result-date'>📅 {escapedDate}</span>");
+                sb.Append("</div>");
+            }
+
+            sb.Append("</details>");
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// 构建用于 JS 注入的搜索结果卡片脚本。
+        /// 将搜索结果卡片插入到指定 AI 消息的上方。
+        /// </summary>
+        public static string BuildSearchResultsInjectionJs(int messageIndex, IReadOnlyList<WebSearchResult> results, string providerName = "联网搜索")
+        {
+            string cardHtml = BuildSearchResultsHtml(results, providerName);
+            string escapedCard = EscapeJsString(cardHtml);
+
+            return $@"
+(function(){{
+    var msgDiv=document.getElementById('msg-{messageIndex}');
+    if(!msgDiv)return;
+    var existing=document.getElementById('search-card-{messageIndex}');
+    if(existing)existing.remove();
+    var temp=document.createElement('div');
+    temp.id='search-card-{messageIndex}';
+    temp.innerHTML={escapedCard};
+    msgDiv.parentNode.insertBefore(temp,msgDiv);
+    window.scrollTo({{top:document.body.scrollHeight,behavior:'smooth'}});
+}})();";
         }
 
         #endregion

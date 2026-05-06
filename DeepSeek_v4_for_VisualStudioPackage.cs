@@ -43,7 +43,7 @@ namespace DeepSeek_v4_for_VisualStudio
 
             // 延迟显示工具窗口，避免在包初始化期间调用 ShowToolWindowAsync
             // 导致 COMException (0x80049283): LoadPackageWithContext 冲突
-            JoinableTaskFactory.RunAsync(async () =>
+            _ = JoinableTaskFactory.RunAsync(async () =>
             {
                 // 等待初始化完成后再切换到主线程
                 await Task.Delay(200, DisposalToken);
