@@ -42,12 +42,49 @@ namespace DeepSeek_v4_for_VisualStudio.View
                 return;
             }
 
+            // ── Skill 弹出框键盘导航 ──
+            if (SkillSuggestionPopup.IsOpen)
+            {
+                if (e.Key == Key.Down)
+                {
+                    e.Handled = true;
+                    NavigateSkillSuggestion(1);
+                    return;
+                }
+                if (e.Key == Key.Up)
+                {
+                    e.Handled = true;
+                    NavigateSkillSuggestion(-1);
+                    return;
+                }
+                if (e.Key == Key.Enter || e.Key == Key.Tab)
+                {
+                    e.Handled = true;
+                    AcceptSkillSuggestion();
+                    return;
+                }
+                if (e.Key == Key.Escape)
+                {
+                    e.Handled = true;
+                    SkillSuggestionPopup.IsOpen = false;
+                    return;
+                }
+            }
+
             if (e.Key == Key.Enter)
             {
                 if (Keyboard.Modifiers == ModifierKeys.Control)
                 {
                     // Ctrl+Enter: 插入换行
                     e.Handled = false;
+                    return;
+                }
+
+                // 如果弹出框打开，Enter 优先选择技能
+                if (SkillSuggestionPopup.IsOpen)
+                {
+                    e.Handled = true;
+                    AcceptSkillSuggestion();
                     return;
                 }
 
@@ -59,6 +96,11 @@ namespace DeepSeek_v4_for_VisualStudio.View
 
         private void SendButton_Click(object sender, RoutedEventArgs e)
         {
+            // 如果弹出框打开，先关闭
+            if (SkillSuggestionPopup.IsOpen)
+            {
+                SkillSuggestionPopup.IsOpen = false;
+            }
             SendMessage();
         }
 
@@ -140,6 +182,260 @@ namespace DeepSeek_v4_for_VisualStudio.View
         {
             _attachedFilePaths.Clear();
             RefreshAttachedFilesUI();
+        }
+
+        #endregion
+
+        #region Event Handlers - Skill Suggestions
+
+        /// <summary>
+        /// 输入框文本变更：检测 / 触发 Skill 自动补全弹出框。
+        /// </summary>
+        private void InputTextBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            try
+            {
+                var text = InputTextBox.Text;
+
+                // 不以 / 开头 → 关闭弹出框
+                if (string.IsNullOrEmpty(text) || !text.StartsWith("/"))
+                {
+                    if (SkillSuggestionPopup.IsOpen)
+                        SkillSuggestionPopup.IsOpen = false;
+                    return;
+                }
+
+                // 命令已包含空格 → 用户正在输入参数，关闭弹出框
+                // 例如: "/code-review " 或 "/create-skill my-skill" 不应触发弹出框
+                if (text.Contains(' '))
+                {
+                    if (SkillSuggestionPopup.IsOpen)
+                        SkillSuggestionPopup.IsOpen = false;
+                    return;
+                }
+
+                // 提取 / 后的文本用于过滤
+                var filterText = text.Length > 1 ? text.Substring(1).ToLowerInvariant() : string.Empty;
+                UpdateSkillSuggestions(filterText);
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"[Skill] 文本变更处理失败: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 更新 Skill 建议列表。
+        /// </summary>
+        private void UpdateSkillSuggestions(string filterText)
+        {
+            try
+            {
+                if (_skillDiscoveryResult == null)
+                {
+                    // 同步获取（首次使用时已有缓存）
+                    _skillDiscoveryResult = SkillService.Instance.DiscoverSkillsAsync(_solutionPath).Result;
+                }
+
+                var allSkills = _skillDiscoveryResult?.Skills ?? new List<SkillDefinition>();
+
+                // 添加内置元命令
+                var metaCommands = new List<SkillSuggestionItem>
+                {
+                    new SkillSuggestionItem
+                    {
+                        Name = "help",
+                        Description = "显示所有可用技能和帮助信息",
+                        Source = "⚙️ 内置",
+                        IsMeta = true,
+                    },
+                    new SkillSuggestionItem
+                    {
+                        Name = "create-skill",
+                        Description = "创建新的自定义 Skill 模板文件",
+                        Source = "⚙️ 内置",
+                        IsMeta = true,
+                    },
+                    new SkillSuggestionItem
+                    {
+                        Name = "refresh-skills",
+                        Description = "强制刷新技能缓存",
+                        Source = "⚙️ 内置",
+                        IsMeta = true,
+                    },
+                };
+
+                // 添加用户/项目技能
+                var skillItems = allSkills
+                    .Select(s => new SkillSuggestionItem
+                    {
+                        Name = s.Name,
+                        Description = s.Description,
+                        Source = s.Source switch
+                        {
+                            SkillSource.Project => "📁 项目",
+                            SkillSource.User => "👤 用户",
+                            SkillSource.BuiltIn => "📦 内置",
+                            _ => "❓"
+                        },
+                        IsMeta = false,
+                        SkillDefinition = s,
+                    })
+                    .ToList();
+
+                var allItems = metaCommands.Concat(skillItems).ToList();
+
+                // 按过滤文本筛选
+                if (!string.IsNullOrEmpty(filterText))
+                {
+                    var parts = filterText.Split(new[] { ' ' }, 2, StringSplitOptions.RemoveEmptyEntries);
+                    var commandPart = parts.Length > 0 ? parts[0] : filterText;
+
+                    allItems = allItems
+                        .Where(item => item.Name.StartsWith(commandPart, StringComparison.OrdinalIgnoreCase)
+                                       || item.Description.Contains(filterText, StringComparison.OrdinalIgnoreCase))
+                        .ToList();
+                }
+
+                // 更新 ListBox
+                SkillSuggestionListBox.ItemsSource = allItems;
+
+                if (allItems.Count > 0)
+                {
+                    SkillSuggestionListBox.SelectedIndex = 0;
+                    SkillSuggestionPopup.IsOpen = true;
+
+                    // 动态调整弹出框宽度
+                    var maxNameLen = allItems.Max(item => item.Name.Length);
+                    // 不显式设置宽度，让 WPF 自动布局
+                }
+                else
+                {
+                    SkillSuggestionPopup.IsOpen = false;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"[Skill] 更新建议列表失败: {ex.Message}");
+                SkillSuggestionPopup.IsOpen = false;
+            }
+        }
+
+        /// <summary>
+        /// 导航 Skill 建议列表（上下键）。
+        /// </summary>
+        private void NavigateSkillSuggestion(int direction)
+        {
+            if (!SkillSuggestionPopup.IsOpen || SkillSuggestionListBox.Items.Count == 0)
+                return;
+
+            var newIndex = SkillSuggestionListBox.SelectedIndex + direction;
+            if (newIndex < 0)
+                newIndex = SkillSuggestionListBox.Items.Count - 1;
+            else if (newIndex >= SkillSuggestionListBox.Items.Count)
+                newIndex = 0;
+
+            SkillSuggestionListBox.SelectedIndex = newIndex;
+            SkillSuggestionListBox.ScrollIntoView(SkillSuggestionListBox.SelectedItem);
+        }
+
+        /// <summary>
+        /// 接受当前选中的 Skill 建议（Enter/Tab 键）。
+        /// </summary>
+        private void AcceptSkillSuggestion()
+        {
+            if (!SkillSuggestionPopup.IsOpen || SkillSuggestionListBox.SelectedItem == null)
+                return;
+
+            if (SkillSuggestionListBox.SelectedItem is SkillSuggestionItem item)
+            {
+                // 替换输入框文本为 /skill-name
+                var skillName = item.Name;
+
+                // ── 日志：记录用户从弹出框选择了技能 ──
+                if (item.IsMeta)
+                    Logger.Info($"[Skill] 用户从弹出框选择元命令: /{skillName}");
+                else
+                    Logger.Info($"[Skill] 用户从弹出框选择技能: /{skillName} | 描述: {item.Description} | 来源: {item.Source}");
+
+                // 保留 / 后的其他参数（如果用户在 /skill-name 后输入了额外文本）
+                var currentText = InputTextBox.Text;
+                var spaceIndex = currentText.IndexOf(' ');
+                var extraArgs = spaceIndex > 0 ? currentText.Substring(spaceIndex) : string.Empty;
+
+                if (item.IsMeta)
+                {
+                    // 元命令直接执行
+                    InputTextBox.Text = $"/{skillName}{extraArgs}";
+                }
+                else
+                {
+                    // 技能命令：格式为 /skill-name [description hint]
+                    var hint = item.SkillDefinition?.ArgumentHint;
+                    InputTextBox.Text = $"/{skillName}{extraArgs}";
+                }
+
+                // 将光标移到末尾
+                InputTextBox.CaretIndex = InputTextBox.Text.Length;
+                InputTextBox.Focus();
+            }
+
+            SkillSuggestionPopup.IsOpen = false;
+        }
+
+        /// <summary>
+        /// ListBox 选中项变更。
+        /// </summary>
+        private void SkillSuggestionListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            // 预留：选中项变更时的处理
+        }
+
+        /// <summary>
+        /// ListBox 键盘事件：Enter/Tab 接受选择，Escape 关闭弹出框。
+        /// 解决鼠标点击选中后按 Enter 无反应的问题。
+        /// </summary>
+        private void SkillSuggestionListBox_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter || e.Key == Key.Tab)
+            {
+                e.Handled = true;
+                AcceptSkillSuggestion();
+                return;
+            }
+            if (e.Key == Key.Escape)
+            {
+                e.Handled = true;
+                SkillSuggestionPopup.IsOpen = false;
+                InputTextBox.Focus();
+                return;
+            }
+            if (e.Key == Key.Up || e.Key == Key.Down)
+            {
+                // 让 ListBox 默认处理导航
+                e.Handled = false;
+            }
+        }
+
+        /// <summary>
+        /// ListBox 双击选中技能。
+        /// </summary>
+        private void SkillSuggestionListBox_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            AcceptSkillSuggestion();
+        }
+
+        /// <summary>
+        /// 输入框失去焦点时关闭弹出框（延迟关闭，允许点击 ListBox 项）。
+        /// </summary>
+        private async void InputTextBox_LostFocus(object sender, RoutedEventArgs e)
+        {
+            // 延迟关闭，确保 ListBox 的 MouseDoubleClick 能先触发
+            await System.Threading.Tasks.Task.Delay(200);
+            if (SkillSuggestionPopup.IsOpen && !SkillSuggestionListBox.IsKeyboardFocusWithin)
+            {
+                SkillSuggestionPopup.IsOpen = false;
+            }
         }
 
         #endregion

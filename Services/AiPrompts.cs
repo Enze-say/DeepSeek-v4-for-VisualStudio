@@ -47,6 +47,105 @@ namespace DeepSeek_v4_for_VisualStudio.Services
 
         #endregion
 
+        #region Skill Prompts
+
+        /// <summary>
+        /// Skill 系统提示词片段 — 注入到主系统提示中，告知 AI 如何使用技能。
+        /// 包含详细的调用时机说明和语义匹配指导。
+        /// </summary>
+        public const string SkillSystemPromptFragment =
+            "\n\n---\n" +
+            "## 技能系统 (Skills)\n\n" +
+            "你拥有一个**技能系统**，可以在对话中按需加载专业化的任务工作流。\n\n" +
+            "### 技能调用时机\n" +
+            "技能在以下 **3 种情况** 下被调用：\n\n" +
+            "1. **用户显式调用** — 用户输入 `/技能名` 时，系统会自动注入该技能的完整指令。\n" +
+            "   此时你必须严格按照技能中的步骤执行。\n\n" +
+            "2. **AI 语义自动匹配** — 当用户的问题或任务**语义上匹配**某个技能的描述时，\n" +
+            "   你应当主动识别并在回答开头声明：「我将使用 **{技能名}** 技能来帮助你。」\n" +
+            "   然后按照技能指令执行。匹配依据：\n" +
+            "   - 用户意图与技能 description 中的关键词高度重合\n" +
+            "   - 用户任务与技能「何时使用」部分描述的场景一致\n" +
+            "   - 用户明确提到技能相关的技术栈或工作流\n\n" +
+            "3. **上下文推断** — 当对话上下文累积到需要特定技能介入时（如多轮调试后\n" +
+            "   需要代码审查），你应当主动建议并加载相应技能。\n\n" +
+            "### 如何使用技能\n" +
+            "- 技能在 `&lt;available_skills&gt;` 块中列出，包含名称和描述。\n" +
+            "- 加载技能后，严格遵循技能中定义的**步骤流程 (Procedure)**。\n" +
+            "- 技能可附带资源：`scripts/`（可执行脚本）、`references/`（参考文档）、`assets/`（模板）。\n" +
+            "- 如果技能要求运行脚本，使用终端执行。\n" +
+            "- **绝不虚构技能** — 只使用 `&lt;available_skills&gt;` 中实际列出的技能。\n\n" +
+            "### 技能匹配示例\n" +
+            "- 用户说「帮我 review 一下这段代码」→ 匹配 `code-review` 技能\n" +
+            "- 用户说「检查安全问题」→ 匹配 `code-review` 技能（description 含 security audit）\n" +
+            "- 用户说「这个函数的性能怎么样」→ 匹配 `code-review` 技能（description 含 code quality）\n\n" +
+            "**可用技能列表：**\n" +
+            "{0}\n\n" +
+            "用户也可以输入 `/技能名` 来显式调用，输入 `/help` 查看所有技能。";
+
+        /// <summary>
+        /// 技能路由判断 — 系统提示词。
+        /// 用于在用户提问时，先让 AI 判断是否应调用某个技能。
+        /// </summary>
+        public const string SkillRoutingSystemPrompt =
+            "你是一个技能路由器。你的唯一任务是：根据用户的问题和可用技能列表，判断是否应该调用某个技能。只返回 JSON，不返回任何其他内容。";
+
+        /// <summary>
+        /// 技能路由判断 — 用户提示词模板。
+        /// {0} = 技能总结
+        /// {1} = 用户问题 + 上下文
+        /// </summary>
+        public const string SkillRoutingUserPrompt =
+            "根据以下用户问题和可用技能列表，判断是否应该调用某个技能。\n\n" +
+            "可用技能总结：\n" +
+            "{0}\n\n" +
+            "用户问题：\n" +
+            "{1}\n\n" +
+            "规则：\n" +
+            "1. 如果用户的问题与某个技能的 description 或「何时使用」语义匹配，返回该技能名称。\n" +
+            "2. 如果用户问题是普通聊天、简单问答、或不需要专业技能介入，skill 设为 null。\n" +
+            "3. 如果匹配到技能，confidence 设为 high/medium/low。\n" +
+            "4. 只返回 JSON，不要包含任何其他文本。\n\n" +
+            "JSON 格式：\n" +
+            "{{\"skill\":\"skill-name\",\"confidence\":\"high|medium|low\",\"reason\":\"简短匹配理由\"}}\n\n" +
+            "请返回路由判断 JSON：";
+
+        /// <summary>
+        /// 内置示例技能：代码审查 (code-review)。
+        /// 演示 SKILL.md 的标准格式。
+        /// </summary>
+        public const string BuiltInSkill_CodeReview = @"---
+name: code-review
+description: '审查代码质量、安全性、性能。Use when: code review, checking code quality, finding bugs, security audit, PR review.'
+argument-hint: '[file or code]'
+user-invocable: true
+---
+
+# 代码审查
+
+## 何时使用
+- 用户请求代码审查或代码检查
+- 提交 PR 前进行自查
+- 发现潜在的 Bug、安全漏洞或性能问题
+
+## 流程
+1. 阅读用户提供或当前打开的文件中的代码
+2. 分析以下方面：
+   - **正确性**: 逻辑错误、边界条件、空引用
+   - **安全性**: SQL 注入、XSS、敏感信息泄露
+   - **性能**: 不必要的分配、N+1 查询、算法复杂度
+   - **可维护性**: 命名规范、代码重复、注释质量
+   - **最佳实践**: 框架约定、设计模式使用
+3. 按严重程度排列问题（严重/中等/建议）
+4. 为每个问题提供具体的修复建议和代码示例
+5. 给出总体评价和改进路线图
+
+## 输出格式
+- 使用 Markdown 表格汇总问题
+- 每个问题包含：位置、严重程度、描述、修复建议";
+
+        #endregion
+
         #region Search Optimization Prompts
 
         /// <summary>

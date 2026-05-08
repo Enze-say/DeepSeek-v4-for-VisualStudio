@@ -86,5 +86,11 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <IncludeInVSIX>true</IncludeInVSIX>
     </Content>
+    <!-- Skill 定义文件（内置技能） -->
+    <Content Include="BuiltInSkills\**\*.*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <IncludeInVSIX>true</IncludeInVSIX>
+      <VSIXSubPath>BuiltInSkills</VSIXSubPath>
+    </Content>
   </ItemGroup>
 </Project>

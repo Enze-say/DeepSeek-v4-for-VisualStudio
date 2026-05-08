@@ -225,7 +225,105 @@
                          VerticalScrollBarVisibility="Auto"
                          VerticalContentAlignment="Top"
                          Padding="4"
-                         PreviewKeyDown="InputTextBox_PreviewKeyDown" />
+                         PreviewKeyDown="InputTextBox_PreviewKeyDown"
+                         TextChanged="InputTextBox_TextChanged"
+                         LostFocus="InputTextBox_LostFocus" />
+
+                <!-- ═══ Skill 斜杠命令自动补全弹出框 ═══ -->
+                <Popup x:Name="SkillSuggestionPopup"
+                       PlacementTarget="{Binding ElementName=InputTextBox}"
+                       Placement="Top"
+                       StaysOpen="True"
+                       AllowsTransparency="True"
+                       Focusable="False"
+                       PopupAnimation="Fade"
+                       HorizontalOffset="4"
+                       VerticalOffset="-4">
+                    <Border Background="#2D2D2D"
+                            BorderBrush="#555555"
+                            BorderThickness="1"
+                            CornerRadius="6"
+                            Padding="2"
+                            MinWidth="260"
+                            MaxWidth="400"
+                            MaxHeight="240">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <TextBlock Grid.Row="0"
+                                       Text="💡 可用技能 (↑↓ 选择, Enter 确认, Esc 取消)"
+                                       FontSize="11"
+                                       Foreground="#888888"
+                                       Margin="8,6,8,4" />
+                            <ListBox Grid.Row="1"
+                                     x:Name="SkillSuggestionListBox"
+                                     Background="Transparent"
+                                     BorderThickness="0"
+                                     Foreground="#D4D4D4"
+                                     FontSize="12"
+                                     MaxHeight="200"
+                                     PreviewKeyDown="SkillSuggestionListBox_PreviewKeyDown"
+                                     SelectionChanged="SkillSuggestionListBox_SelectionChanged"
+                                     MouseDoubleClick="SkillSuggestionListBox_MouseDoubleClick">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid Margin="0,1">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0"
+                                                       Text="{Binding Name, StringFormat='📌 /{0}'}"
+                                                       Foreground="#6CAFD9"
+                                                       FontWeight="SemiBold"
+                                                       FontSize="12"
+                                                       Margin="0,0,8,0" />
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding Description}"
+                                                       Foreground="#C8C8C8"
+                                                       FontSize="11"
+                                                       TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Grid.Column="2"
+                                                       Text="{Binding Source}"
+                                                       Foreground="#888888"
+                                                       FontSize="10"
+                                                       Margin="6,0,0,0" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                                <ListBox.ItemContainerStyle>
+                                    <Style TargetType="ListBoxItem">
+                                        <Setter Property="Background" Value="Transparent" />
+                                        <Setter Property="Padding" Value="8,5" />
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="ListBoxItem">
+                                                    <Border x:Name="Border"
+                                                            Background="{TemplateBinding Background}"
+                                                            Padding="{TemplateBinding Padding}"
+                                                            CornerRadius="3">
+                                                        <ContentPresenter />
+                                                    </Border>
+                                                    <ControlTemplate.Triggers>
+                                                        <Trigger Property="IsMouseOver" Value="True">
+                                                            <Setter TargetName="Border" Property="Background" Value="#3C3C3C" />
+                                                        </Trigger>
+                                                        <Trigger Property="IsSelected" Value="True">
+                                                            <Setter TargetName="Border" Property="Background" Value="#264F78" />
+                                                        </Trigger>
+                                                    </ControlTemplate.Triggers>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </ListBox.ItemContainerStyle>
+                            </ListBox>
+                        </Grid>
+                    </Border>
+                </Popup>
 
                 <!-- 已上传文件标签区 -->
                 <ItemsControl Grid.Row="1"

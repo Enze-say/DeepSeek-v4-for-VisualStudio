@@ -47,6 +47,8 @@ namespace DeepSeek_v4_for_VisualStudio.View
         private DeepSeekApiService? _apiService;
         private WebSearchService? _webSearchService;
         private McpManagerService? _mcpManager;
+        private SkillService? _skillService;
+        private SkillDiscoveryResult? _skillDiscoveryResult;
         private CancellationTokenSource? _currentStreamingCts;
         private string? _solutionPath;
 
@@ -135,6 +137,7 @@ namespace DeepSeek_v4_for_VisualStudio.View
             InitializeWebSearchService();
             InitializeOcrService();
             InitializeMcp(); // MCP 后台初始化，不阻塞 UI
+            InitializeSkills(); // Skill 后台发现，不阻塞 UI
             _ = ResolveSolutionPathAsync();
             _ = LoadAndShowAsync();
 
@@ -301,6 +304,45 @@ namespace DeepSeek_v4_for_VisualStudio.View
             finally
             {
                 UpdateMcpButtonAppearance();
+            }
+        }
+        #pragma warning restore VSTHRD100
+
+        /// <summary>
+        /// 后台发现并加载 Skill。
+        /// 扫描项目目录和用户目录下的 SKILL.md 文件。
+        /// 失败不影响核心聊天功能。
+        /// </summary>
+        #pragma warning disable VSTHRD100 // async void 用于 fire-and-forget 初始化
+        private async void InitializeSkills()
+        {
+            try
+            {
+                _skillService = SkillService.Instance;
+                _skillDiscoveryResult = await _skillService.DiscoverSkillsAsync(_solutionPath);
+
+                if (_skillDiscoveryResult.TotalCount > 0)
+                {
+                    Logger.Info($"[Skill] Skill 发现完成: 共 {_skillDiscoveryResult.TotalCount} 个技能 " +
+                        $"(项目: {_skillDiscoveryResult.ProjectSkillCount}, " +
+                        $"用户: {_skillDiscoveryResult.UserSkillCount})");
+
+                    var invocableCount = _skillDiscoveryResult.UserInvocableSkills.Count;
+                    if (invocableCount > 0)
+                    {
+                        var names = string.Join(", ", _skillDiscoveryResult.UserInvocableSkills.ConvertAll(s => s.Name));
+                        Logger.Info($"[Skill] 可调用技能: {names}");
+                    }
+                    // 内置示例技能已随扩展发布，在 BuiltInSkills 目录下
+                }
+                else
+                {
+                    Logger.Info("[Skill] 未发现任何 Skill 定义。可在 .github/skills/<name>/SKILL.md 或 ~/.copilot/skills/<name>/SKILL.md 中创建。");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error($"[Skill] Skill 初始化失败: {ex.Message}", ex);
             }
         }
         #pragma warning restore VSTHRD100

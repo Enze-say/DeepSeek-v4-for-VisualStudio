@@ -22,6 +22,8 @@ namespace DeepSeek_v4_for_VisualStudio.Utils
 
         public static void Info(string message, [CallerMemberName] string? member = null)
             => Log("INFO", message, member);
+        public static void Warn(string message, [CallerMemberName] string? member = null)
+            => Log("WARN", message, member);
 
         public static void Error(string message, Exception? ex = null, [CallerMemberName] string? member = null)
             => Log("ERROR", $"{message} {ex?.Message}", member);
