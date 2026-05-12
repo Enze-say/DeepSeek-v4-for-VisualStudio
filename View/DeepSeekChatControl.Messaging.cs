@@ -117,38 +117,6 @@ namespace DeepSeek_v4_for_VisualStudio.View
                     if (!string.IsNullOrEmpty(fileContext))
                         Logger.Info($"文件解析完成: {attachedFileNames.Count} 个文件");
                 }
-                else if (!string.IsNullOrEmpty(_solutionPath) && _agentDispatcher != null
-                    && !ExploreAgent.UserMessageReferencesFiles(userText))
-                {
-                    try
-                    {
-                        StatusLabel.Text = "ExploreAgent 正在智能搜索相关文件…";
-                        string conversationContext = GetConversationContextForDiscovery();
-                        var exploreAgent = _agentDispatcher.ExploreAgent;
-                        var solutionPath = _solutionPath;
-                        var query = userText ?? string.Empty;
-                        var ctx = conversationContext;
-
-                        var discoveredFiles = await Task.Run(() =>
-                            exploreAgent.DiscoverRelevantFilesAsync(solutionPath, query, additionalContext: ctx));
-                        if (discoveredFiles.Count > 0)
-                        {
-                            foreach (var file in discoveredFiles)
-                                _attachedFilePaths.Add(file);
-
-                            StatusLabel.Text = $"正在解析相关文件 ({discoveredFiles.Count} 个)…";
-                            parseResults = await FileParserService.ParseFilesAsync(_attachedFilePaths);
-                            attachedFileNames = parseResults.Where(r => r.Success).Select(r => r.FileName).ToList();
-                            fileContext = FileParserService.FormatParseResultsForContext(parseResults);
-                            if (!string.IsNullOrEmpty(fileContext))
-                                Logger.Info($"[ExploreAgent] 智能文件发现完成: {attachedFileNames.Count} 个文件");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Warn($"[ExploreAgent] 智能文件发现失败: {ex.Message}");
-                    }
-                }
 
                 // 构建用户消息内容
                 string userDisplayContent = userText ?? string.Empty;
@@ -456,8 +424,11 @@ namespace DeepSeek_v4_for_VisualStudio.View
                         List<ToolDefinition>? toolDefs = null;
                         if (_mcpManager != null && _mcpManager.AllTools.Count > 0)
                         {
-                            toolDefs = _mcpManager.GetToolDefinitions();
-                            Logger.Info($"[MCP] 本轮携带 {toolDefs.Count} 个工具定义");
+                            // ── 根据当前活跃 Agent 的 AllowedTools 白名单过滤 ──
+                            var allowedTools = _agentDispatcher?.ActiveAgentAllowedTools;
+                            toolDefs = _mcpManager.GetFilteredToolDefinitions(allowedTools);
+                            Logger.Info($"[MCP] 本轮携带 {toolDefs.Count} 个工具定义"
+                                + (allowedTools != null ? $" (已按 Agent 白名单过滤)" : ""));
                         }
 
                         var apiService = _apiService!;

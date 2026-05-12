@@ -65,16 +65,6 @@ namespace DeepSeek_v4_for_VisualStudio.View
         {
             var sb = new StringBuilder();
 
-            if (!string.IsNullOrEmpty(userMsg.OriginalContent))
-            {
-                sb.AppendLine("【原始问题】");
-                string original = userMsg.OriginalContent!;
-                if (original.Length > 2000)
-                    original = original.Substring(0, 2000) + "\n…(已截断)";
-                sb.AppendLine(original);
-                sb.AppendLine();
-            }
-
             string conversationCtx = GetConversationContextForRetry();
             if (!string.IsNullOrEmpty(conversationCtx))
             {
@@ -139,11 +129,23 @@ namespace DeepSeek_v4_for_VisualStudio.View
                 await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
                 StatusLabel.Text = "🤖 Agent 正在分析任务...";
 
+                // ── 清理上一轮 Agent 执行的追踪状态 ──
+                lock (_lock)
+                {
+                    _createdPlanIds.Clear();
+                    _pendingLogEntries.Clear();
+                    _agentThinkingContent.Clear();
+                }
+                _agentStreamingMsgIndex = -1;
+                _lastReportedStepIndex = 0;
+                _lastReportedStepStatus = string.Empty;
+
                 var context = new AgentContext
                 {
                     SolutionPath = _solutionPath,
                     FileContext = fileContext,
                     ConversationHistory = _contextManager.GetConversationHistory(),
+                    IsPlanningMode = routing?.NeedsPlanning == true || routing?.TargetAgent == AgentType.Plan,
                     ReadFileAsync = async (path) =>
                     {
                         if (File.Exists(path))
@@ -152,11 +154,38 @@ namespace DeepSeek_v4_for_VisualStudio.View
                     },
                 };
 
+                // ── 记录 Token 用量日志 ──
+                var stats = _contextManager.GetStats();
+                Logger.Info($"[TokenUsage] 当前对话 Token: {stats.EstimatedTokens:N0}/{stats.TokenBudget:N0} ({stats.UsagePercent:F1}%) | 轮次: {stats.TurnCount} | 消息: {stats.MessageCount}");
+
+                await TaskScheduler.Default;
+
+                // ── 创建实时思考气泡（AI 回答流式输出）──
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                _agentThinkingContent.Clear();
+                var thinkingMsg = new ChatMessage
+                {
+                    Role = "assistant",
+                    Content = "🤖 Agent 正在分析任务…",
+                    ReasoningContent = string.Empty,
+                    Timestamp = DateTime.Now,
+                    IsStreaming = true,
+                    IsRendered = false,
+                };
+                lock (_lock)
+                {
+                    _messages.Add(thinkingMsg);
+                    _agentStreamingMsgIndex = _messages.Count - 1;
+                }
+                AddMessagesHtml("assistant", thinkingMsg.Content);
+                UpdateBrowser();
                 await TaskScheduler.Default;
 
                 var editAgent = _agentDispatcher.EditAgent;
                 editAgent.PlanUpdated += OnAgentPlanUpdated;
                 _agentDispatcher.PlanUpdated += OnAgentDispatcherPlanUpdated;
+                _agentDispatcher.LogEntryAdded += OnAgentLogEntryAdded;
+                _agentDispatcher.FileChangeNotified += OnAgentFileChangeNotified;
 
                 AgentResult agentResult;
                 try
@@ -167,6 +196,8 @@ namespace DeepSeek_v4_for_VisualStudio.View
                 {
                     editAgent.PlanUpdated -= OnAgentPlanUpdated;
                     _agentDispatcher.PlanUpdated -= OnAgentDispatcherPlanUpdated;
+                    _agentDispatcher.LogEntryAdded -= OnAgentLogEntryAdded;
+                    _agentDispatcher.FileChangeNotified -= OnAgentFileChangeNotified;
                 }
 
                 if (agentResult.Handoff != null)
@@ -178,6 +209,8 @@ namespace DeepSeek_v4_for_VisualStudio.View
 
                     editAgent.PlanUpdated += OnAgentPlanUpdated;
                     _agentDispatcher.PlanUpdated += OnAgentDispatcherPlanUpdated;
+                    _agentDispatcher.LogEntryAdded += OnAgentLogEntryAdded;
+                    _agentDispatcher.FileChangeNotified += OnAgentFileChangeNotified;
                     try
                     {
                         agentResult = await _agentDispatcher.ExecuteHandoffAsync(agentResult.Handoff, context);
@@ -186,6 +219,8 @@ namespace DeepSeek_v4_for_VisualStudio.View
                     {
                         editAgent.PlanUpdated -= OnAgentPlanUpdated;
                         _agentDispatcher.PlanUpdated -= OnAgentDispatcherPlanUpdated;
+                        _agentDispatcher.LogEntryAdded -= OnAgentLogEntryAdded;
+                        _agentDispatcher.FileChangeNotified -= OnAgentFileChangeNotified;
                     }
                 }
 
@@ -195,22 +230,23 @@ namespace DeepSeek_v4_for_VisualStudio.View
                 {
                     var plan = agentResult.Plan;
 
+                    // ── 更新任务面板为完成状态 ──
                     if (plan.Steps.Count > 0)
                     {
                         try
                         {
-                            string finalProgressJs = ChatHtmlService.BuildAgentProgressUpdateJs(plan);
-                            await ChatWebView.CoreWebView2.ExecuteScriptAsync(finalProgressJs);
+                            string completeJs = ChatHtmlService.BuildAgentTaskPanelCompleteJs(plan);
+                            await ChatWebView.CoreWebView2.ExecuteScriptAsync(completeJs);
                         }
                         catch { }
                     }
 
+                    // ── 构建最终摘要并更新思考气泡为完成状态 ──
                     var summaryBuilder = new StringBuilder();
 
                     if (!string.IsNullOrWhiteSpace(agentResult.Content))
                     {
-                        summaryBuilder.AppendLine(agentResult.Content);
-                        summaryBuilder.AppendLine();
+                        summaryBuilder.Append(agentResult.Content);
                     }
                     else
                     {
@@ -222,36 +258,57 @@ namespace DeepSeek_v4_for_VisualStudio.View
                                 ? $"## ⚠️ 任务完成 — {completed}/{plan.Steps.Count} 步成功，{failed} 步失败"
                                 : $"## ✅ 任务完成 — {completed}/{plan.Steps.Count} 步全部成功");
                         summaryBuilder.AppendLine();
+
+                        if (plan.ChangedFiles.Count > 0)
+                        {
+                            summaryBuilder.AppendLine($"**文件变更**: {plan.ChangedFiles.Count} 个文件");
+                            foreach (var f in plan.ChangedFiles)
+                            {
+                                string fname = System.IO.Path.GetFileName(f.FilePath);
+                                summaryBuilder.AppendLine($"- `{fname}` (+{f.LinesAdded} -{f.LinesRemoved})");
+                            }
+                            summaryBuilder.AppendLine();
+                        }
                     }
 
-                    string structuredSummaryHtml = ChatHtmlService.BuildAgentSummaryHtml(plan);
-                    string combinedContent = summaryBuilder.ToString().TrimEnd();
-
-                    string finalHtml;
-                    if (!string.IsNullOrWhiteSpace(agentResult.Content))
+                    // 追加思考过程到摘要后面（折叠显示）——作为独立 HTML 注入，不经过 Markdown 渲染
+                    string thinkingText;
+                    lock (_lock) { thinkingText = _agentThinkingContent.ToString(); }
+                    string thinkingDetailsHtml = string.Empty;
+                    if (!string.IsNullOrWhiteSpace(thinkingText))
                     {
-                        string textSummaryHtml = ChatHtmlService.RenderMarkdownToHtml(combinedContent);
-                        finalHtml = textSummaryHtml + structuredSummaryHtml;
+                        // 将思考内容渲染为纯文本 HTML（保留换行）
+                        string escapedThinking = System.Net.WebUtility.HtmlEncode(thinkingText)
+                            .Replace("\n", "<br>");
+                        thinkingDetailsHtml =
+                            "<details class='reasoning-panel' style='margin-top:12px'>" +
+                            "<summary>📋 执行过程</summary>" +
+                            "<div class='reasoning-content'>" + escapedThinking + "</div>" +
+                            "</details>";
                     }
-                    else
-                    {
-                        string textHtml = "<div style='color:#D4D4D4;font-size:13px;font-weight:600;margin:4px 0 8px'>"
-                            + System.Net.WebUtility.HtmlEncode(combinedContent).Replace("\n", "<br>")
-                            + "</div>";
-                        finalHtml = textHtml + structuredSummaryHtml;
-                    }
 
-                    var summaryMsg = new ChatMessage
+                    string finalContent = summaryBuilder.ToString().TrimEnd();
+
+                    // ── 更新现有的流式思考气泡为最终内容 ──
+                    lock (_lock)
                     {
-                        Role = "assistant",
-                        Content = finalHtml,
-                        Timestamp = DateTime.Now,
-                        IsRendered = true,
-                        IsHtml = true,
-                    };
-                    lock (_lock) { _messages.Add(summaryMsg); }
-                    AddMessagesHtml("assistant", finalHtml, isHtml: true);
-                    UpdateBrowser();
+                        if (_agentStreamingMsgIndex >= 0 && _agentStreamingMsgIndex < _messages.Count)
+                        {
+                            var msg = _messages[_agentStreamingMsgIndex];
+                            msg.Content = finalContent;
+                            msg.IsStreaming = false;
+                            msg.IsRendered = true;
+                        }
+                    }
+                    await UpdateStreamingMessageAsync(_agentStreamingMsgIndex, finalContent, string.Empty, isComplete: true);
+                    // ── 最终渲染用 Markdown → HTML（执行过程作为独立 HTML 注入，不经过 Markdown）──
+                    try
+                    {
+                        string finalRenderJs = ChatHtmlService.BuildFinalRenderJs(
+                            _agentStreamingMsgIndex, finalContent, string.Empty, thinkingDetailsHtml);
+                        await ChatWebView.CoreWebView2.ExecuteScriptAsync(finalRenderJs);
+                    }
+                    catch { }
 
                     StatusLabel.Text = plan.IsCancelled
                         ? "⚠️ Agent 任务已取消"
@@ -266,30 +323,48 @@ namespace DeepSeek_v4_for_VisualStudio.View
                 }
                 else if (agentResult.Success && !string.IsNullOrWhiteSpace(agentResult.Content))
                 {
-                    var textMsg = new ChatMessage
+                    // 将思考气泡更新为最终内容
+                    lock (_lock)
                     {
-                        Role = "assistant",
-                        Content = agentResult.Content,
-                        Timestamp = DateTime.Now,
-                        IsRendered = true,
-                    };
-                    lock (_lock) { _messages.Add(textMsg); }
-                    AddMessagesHtml("assistant", agentResult.Content);
-                    UpdateBrowser();
+                        if (_agentStreamingMsgIndex >= 0 && _agentStreamingMsgIndex < _messages.Count)
+                        {
+                            var msg = _messages[_agentStreamingMsgIndex];
+                            msg.Content = agentResult.Content;
+                            msg.IsStreaming = false;
+                            msg.IsRendered = true;
+                        }
+                    }
+                    await UpdateStreamingMessageAsync(_agentStreamingMsgIndex, agentResult.Content, string.Empty, isComplete: true);
+                    try
+                    {
+                        string frJs = ChatHtmlService.BuildFinalRenderJs(
+                            _agentStreamingMsgIndex, agentResult.Content, string.Empty);
+                        await ChatWebView.CoreWebView2.ExecuteScriptAsync(frJs);
+                    }
+                    catch { }
                     StatusLabel.Text = "就绪";
                 }
                 else if (!agentResult.Success)
                 {
-                    var errorMsg = new ChatMessage
+                    string errorContent = $"❌ Agent 执行失败: {agentResult.ErrorMessage}";
+                    lock (_lock)
                     {
-                        Role = "assistant",
-                        Content = $"❌ Agent 执行失败: {agentResult.ErrorMessage}",
-                        Timestamp = DateTime.Now,
-                        IsRendered = true,
-                    };
-                    lock (_lock) { _messages.Add(errorMsg); }
-                    AddMessagesHtml("assistant", errorMsg.Content);
-                    UpdateBrowser();
+                        if (_agentStreamingMsgIndex >= 0 && _agentStreamingMsgIndex < _messages.Count)
+                        {
+                            var msg = _messages[_agentStreamingMsgIndex];
+                            msg.Content = errorContent;
+                            msg.IsStreaming = false;
+                            msg.IsRendered = true;
+                        }
+                    }
+                    await UpdateStreamingMessageAsync(_agentStreamingMsgIndex, errorContent, string.Empty, isComplete: true);
+                    try
+                    {
+                        string frJs = ChatHtmlService.BuildFinalRenderJs(
+                            _agentStreamingMsgIndex, errorContent, string.Empty);
+                        await ChatWebView.CoreWebView2.ExecuteScriptAsync(frJs);
+                    }
+                    catch { }
                     StatusLabel.Text = $"❌ Agent 错误: {agentResult.ErrorMessage}";
                 }
             }
@@ -307,6 +382,7 @@ namespace DeepSeek_v4_for_VisualStudio.View
 
         /// <summary>
         /// AgentDispatcher 层面的 PlanUpdated 回调。
+        /// 创建/更新底部任务流程面板（替代独立计划消息气泡）。
         /// </summary>
         private void OnAgentDispatcherPlanUpdated(AgentTaskPlan plan)
         {
@@ -316,30 +392,30 @@ namespace DeepSeek_v4_for_VisualStudio.View
                 if (ChatWebView.CoreWebView2 == null) return;
                 try
                 {
-                    string checkJs = "document.getElementById('agent-bullet-1') !== null";
-                    string checkResult = await ChatWebView.CoreWebView2.ExecuteScriptAsync(checkJs);
-                    bool planExists = checkResult == "true";
+                    string pid = plan.PlanId;
 
-                    if (!planExists)
+                    // ── C# 层面防重：已创建过面板的，只做进度更新 ──
+                    bool alreadyCreated;
+                    lock (_lock) { alreadyCreated = _createdPlanIds.Contains(pid); }
+
+                    if (!alreadyCreated)
                     {
-                        string planHtml = ChatHtmlService.BuildAgentPlanHtml(plan);
-                        var planMsg = new ChatMessage
-                        {
-                            Role = "assistant",
-                            Content = planHtml,
-                            Timestamp = DateTime.Now,
-                            IsRendered = true,
-                            IsHtml = true,
-                        };
-                        lock (_lock) { _messages.Add(planMsg); }
-                        AddMessagesHtml("assistant", planHtml, isHtml: true);
-                        _browserInitialized = false;
-                        UpdateBrowser();
+                        lock (_lock) { _createdPlanIds.Add(pid); }
+                        // 创建底部任务面板
+                        string createJs = ChatHtmlService.BuildAgentTaskPanelCreateJs(plan);
+                        await ChatWebView.CoreWebView2.ExecuteScriptAsync(createJs);
+
+                        // ── 输出规划信息到思考气泡 ──
+                        AppendAgentThinking($"📋 **规划完成**: {plan.Title}");
+                        AppendAgentThinking($"   共 {plan.Steps.Count} 个步骤");
+                        foreach (var s in plan.Steps)
+                            AppendAgentThinking($"   {s.Index}. {s.Title}");
                     }
                     else
                     {
-                        string js = ChatHtmlService.BuildAgentProgressUpdateJs(plan);
-                        await ChatWebView.CoreWebView2.ExecuteScriptAsync(js);
+                        // 更新任务面板进度
+                        string updateJs = ChatHtmlService.BuildAgentTaskPanelUpdateJs(plan);
+                        await ChatWebView.CoreWebView2.ExecuteScriptAsync(updateJs);
                     }
 
                     StatusLabel.Text = $"🤖 Plan Agent: {plan.Steps.Count} 个步骤已规划";
@@ -353,6 +429,8 @@ namespace DeepSeek_v4_for_VisualStudio.View
 
         /// <summary>
         /// Agent 步骤状态变更回调：更新 WebView 中的步骤进度。
+        /// 如果计划 HTML 尚未创建（单步计划场景），则先创建再更新。
+        /// 通过 _createdPlanIds 在 C# 层面防止重复创建计划消息。
         /// </summary>
         private void OnAgentPlanUpdated(AgentTaskPlan plan)
         {
@@ -363,8 +441,44 @@ namespace DeepSeek_v4_for_VisualStudio.View
 
                 try
                 {
-                    string js = ChatHtmlService.BuildAgentProgressUpdateJs(plan);
-                    await ChatWebView.CoreWebView2.ExecuteScriptAsync(js);
+                    string pid = plan.PlanId;
+
+                    // ── C# 层面防重 ──
+                    bool alreadyCreated;
+                    lock (_lock) { alreadyCreated = _createdPlanIds.Contains(pid); }
+
+                    if (!alreadyCreated)
+                    {
+                        lock (_lock) { _createdPlanIds.Add(pid); }
+                        // 创建底部任务面板
+                        string createJs = ChatHtmlService.BuildAgentTaskPanelCreateJs(plan);
+                        await ChatWebView.CoreWebView2.ExecuteScriptAsync(createJs);
+                    }
+                    else
+                    {
+                        // 更新任务面板进度
+                        string updateJs = ChatHtmlService.BuildAgentTaskPanelUpdateJs(plan);
+                        await ChatWebView.CoreWebView2.ExecuteScriptAsync(updateJs);
+                    }
+
+                    // ── 输出步骤状态变更到思考气泡 ──
+                    if (plan.CurrentStepIndex > 0 && plan.CurrentStepIndex <= plan.Steps.Count)
+                    {
+                        var step = plan.Steps[plan.CurrentStepIndex - 1];
+                        string statusKey = $"{step.Index}:{step.Status}";
+                        if (step.Index != _lastReportedStepIndex || statusKey != _lastReportedStepStatus)
+                        {
+                            _lastReportedStepIndex = step.Index;
+                            _lastReportedStepStatus = statusKey;
+                            if (step.Status == AgentStepStatus.Completed)
+                                AppendAgentThinking($"✅ 步骤 {step.Index} 完成: {step.Title}");
+                            else if (step.Status == AgentStepStatus.Failed)
+                                AppendAgentThinking($"❌ 步骤 {step.Index} 失败: {step.ResultSummary ?? step.Title}");
+                            else if (step.Status == AgentStepStatus.InProgress)
+                                AppendAgentThinking($"🔄 步骤 {step.Index}: {step.Title}");
+                        }
+                    }
+
                     StatusLabel.Text = $"🤖 Agent: 步骤 {plan.CurrentStepIndex}/{plan.Steps.Count}";
                 }
                 catch (Exception ex)
@@ -375,7 +489,104 @@ namespace DeepSeek_v4_for_VisualStudio.View
         }
 
         /// <summary>
+        /// 向实时思考气泡追加一行内容（Markdown 格式），并更新 DOM。
+        /// </summary>
+        private void AppendAgentThinking(string line)
+        {
+            lock (_lock)
+            {
+                if (_agentStreamingMsgIndex < 0) return;
+                if (_agentThinkingContent.Length > 0)
+                    _agentThinkingContent.AppendLine();
+                _agentThinkingContent.Append(line);
+            }
+            _ = ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
+            {
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                if (ChatWebView.CoreWebView2 == null || _agentStreamingMsgIndex < 0) return;
+                try
+                {
+                    string content;
+                    lock (_lock) { content = _agentThinkingContent.ToString(); }
+                    await UpdateStreamingMessageAsync(_agentStreamingMsgIndex, content, string.Empty, isComplete: false);
+                }
+                catch { }
+            });
+        }
+
+        /// <summary>
+        /// 将日志条目格式化为思考气泡中的可读行。
+        /// 过滤掉过于技术性的日志，保留用户关心的信息。
+        /// </summary>
+        private static string FormatLogForThinking(AgentLogEntry entry)
+        {
+            string msg = entry.Message ?? string.Empty;
+
+            // 过滤纯内部日志
+            if (msg.StartsWith("[TokenUsage]") || msg.StartsWith("[Retry") || msg.StartsWith("[AgentDispatcher]"))
+                return string.Empty;
+            if (msg.Contains("上下文已累积") || msg.Contains("Planning 模式"))
+                return string.Empty;
+
+            // 格式化为可读的思考内容
+            if (msg.StartsWith("📄") || msg.StartsWith("📖") || msg.Contains("已读取"))
+                return msg;
+            if (msg.StartsWith("✅") || msg.StartsWith("❌") || msg.StartsWith("⚠️"))
+                return msg;
+            if (msg.StartsWith("🔨") || msg.StartsWith("🔧"))
+                return msg;
+            if (msg.StartsWith("阶段") || msg.Contains("/3:"))
+                return $"🔍 {msg}";
+            if (msg.StartsWith("执行步骤") || msg.Contains("个步骤已规划"))
+                return msg;
+            if (msg.StartsWith("Plan Agent 开始规划"))
+                return "🔍 开始分析任务，探索项目结构…";
+            if (msg.StartsWith("计划创建完成"))
+                return msg;
+            if (msg.StartsWith("无计划"))
+                return "📋 单步任务，直接执行代码修改…";
+            if (msg.Contains("编译通过"))
+                return "✅ 编译验证通过";
+            if (msg.Contains("编译") && (msg.Contains("失败") || msg.Contains("错误")))
+                return $"⚠️ {msg}";
+
+            // ── ExploreAgent 委托和发现日志 ──
+            if (msg.StartsWith("[EditAgent] 委托 ExploreAgent"))
+                return $"🔍 {msg.Replace("[EditAgent] ", "")}";
+            if (msg.StartsWith("[EditAgent] ExploreAgent 返回"))
+                return $"📁 {msg.Replace("[EditAgent] ", "")}";
+            if (msg.StartsWith("[EditAgent]"))
+                return $"📝 {msg.Replace("[EditAgent] ", "")}";
+            if (msg.StartsWith("[Explore] [Discover]"))
+                return string.Empty; // Explore 内部发现日志不展示
+            if (msg.StartsWith("[Explore]"))
+                return $"🔍 {msg.Replace("[Explore] ", "")}";
+
+            // 其他日志：以 INFO 级别展示简要信息
+            if (entry.Level == "ERROR")
+                return $"❌ {msg}";
+            if (entry.Level == "WARN")
+                return $"⚠️ {msg}";
+
+            return string.Empty; // INFO 级别默认不展示，避免刷屏
+        }
+
+        /// <summary>
+        /// Agent 日志条目回调：仅更新实时思考气泡。
+        /// </summary>
+        private void OnAgentLogEntryAdded(AgentLogEntry entry)
+        {
+            // ── 更新实时思考气泡 ──
+            string thinkingLine = FormatLogForThinking(entry);
+            if (!string.IsNullOrEmpty(thinkingLine))
+                AppendAgentThinking(thinkingLine);
+        }
+
+        /// <summary>
         /// Agent 权限请求回调：在 WebView 中注入确认/拒绝按钮。
+        /// 针对不同 ActionType 渲染不同的 UI：
+        /// - "file_delete" → 文件删除确认卡片（含文件列表、确认/取消按钮）
+        /// - 其他 → 通用权限确认弹窗
         /// </summary>
         private void OnAgentPermissionRequested(AgentPermissionRequest request)
         {
@@ -386,9 +597,19 @@ namespace DeepSeek_v4_for_VisualStudio.View
 
                 try
                 {
-                    string js = ChatHtmlService.BuildPermissionRequestJs(request);
+                    string js;
+                    if (request.ActionType == "file_delete")
+                    {
+                        js = ChatHtmlService.BuildFileDeleteConfirmationJs(request);
+                        StatusLabel.Text = $"🗑️ 等待确认删除: {request.Title}";
+                    }
+                    else
+                    {
+                        js = ChatHtmlService.BuildPermissionRequestJs(request);
+                        StatusLabel.Text = $"🔐 等待确认: {request.Title}";
+                    }
+
                     await ChatWebView.CoreWebView2.ExecuteScriptAsync(js);
-                    StatusLabel.Text = $"🔐 等待确认: {request.Title}";
                 }
                 catch (Exception ex)
                 {
@@ -396,6 +617,22 @@ namespace DeepSeek_v4_for_VisualStudio.View
                     _agentDispatcher?.RespondToPermission(request.RequestId, false);
                 }
             });
+        }
+
+        /// <summary>
+        /// Agent 文件变更实时通知回调：仅更新实时思考气泡。
+        /// </summary>
+        private void OnAgentFileChangeNotified(AgentFileChangeEventArgs args)
+        {
+            // ── 更新实时思考气泡 ──
+            string icon = args.ChangeType.ToLowerInvariant() switch
+            {
+                "create" => "📄 新建",
+                "delete" => "🗑️ 删除",
+                _ => "✏️ 修改",
+            };
+            string fileName = System.IO.Path.GetFileName(args.FilePath);
+            AppendAgentThinking($"{icon} `{fileName}` ({args.Detail})");
         }
 
         #endregion
@@ -813,6 +1050,10 @@ namespace DeepSeek_v4_for_VisualStudio.View
             lock (_lock) { _isGenerating = true; }
             UpdateButtonsState();
 
+            // ── 记录 Token 用量日志 ──
+            var tokenStats = _contextManager.GetStats();
+            Logger.Info($"[TokenUsage] 当前对话 Token: {tokenStats.EstimatedTokens:N0}/{tokenStats.TokenBudget:N0} ({tokenStats.UsagePercent:F1}%) | 轮次: {tokenStats.TurnCount} | 消息: {tokenStats.MessageCount}");
+
             lock (_lock)
             {
                 int removeFrom = userMsgIndex + 1;
@@ -872,14 +1113,6 @@ namespace DeepSeek_v4_for_VisualStudio.View
                 if (_agentDispatcher != null && !string.IsNullOrEmpty(userContent) && !userContent.StartsWith("/"))
                 {
                     var routing = await _agentDispatcher.RouteAsync(enrichedContent);
-
-                    bool isRetry = !string.IsNullOrEmpty(userMsg.OriginalContent);
-                    if (isRetry && !routing.NeedsPlanning &&
-                        (routing.TargetAgent == AgentType.Edit || routing.TargetAgent == AgentType.Plan))
-                    {
-                        routing.NeedsPlanning = true;
-                        Logger.Info($"[Retry] 检测到编辑重试，强制启用 Planning 以确保 Agent 获取完整上下文");
-                    }
 
                     bool needsAgent = routing.TargetAgent == AgentType.Plan
                         || routing.TargetAgent == AgentType.Edit

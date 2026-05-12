@@ -30,6 +30,9 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
         public PlanAgent(DeepSeekApiService apiService) : base(apiService, AgentType.Plan)
         {
             _exploreAgent = new ExploreAgent(apiService);
+            // ── 转发 ExploreAgent 的日志到 PlanAgent（进而到 AgentDispatcher → UI）──
+            _exploreAgent.LogEntryAdded += (entry) => AddLog(entry.Level, $"[Explore] {entry.Message}");
+            _exploreAgent.FileChangeNotified += (args) => NotifyFileChange(args.PlanId, args.ChangeType, args.FilePath, args.Detail);
         }
 
         #region Agent Definition
@@ -75,9 +78,18 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
                 "## 规则\n" +
                 "- 如果你考虑使用文件编辑工具——停止。计划是给别人执行的。\n" +
                 "- 使用 vscode_askQuestions 工具随时澄清需求——不要做大假设\n" +
-                "- 在实现之前呈现一个经过充分研究的、没有遗漏的计划\n\n" +
+                "- 在实现之前呈现一个经过充分研究的、没有遗漏的计划\n" +
+                "- **强制**：在制定完整方案前，必须先用 Explore 子代理深入理解项目代码结构、现有模块依赖、命名规范和架构模式。\n" +
+                "  不了解项目结构和现有代码就制定计划是不可接受的。\n\n" +
                 "## 工作流\n" +
                 "基于用户输入循环以下阶段。这是迭代的，不是线性的。\n\n" +
+                "### 0. 项目理解 (Project Understanding) — **必须最先执行**\n" +
+                "在制定任何计划之前，你必须先理解项目的整体结构：\n" +
+                "- 启动 1-3 个 Explore 子代理了解项目文件结构、关键模块、依赖关系\n" +
+                "- 结合用户提问中的关键词和上下文，识别相关的现有代码\n" +
+                "- 了解项目使用的框架、库、编码规范和测试框架\n" +
+                "- 如果用户提供了特定的文件路径或代码片段，优先分析这些内容\n" +
+                "- 只有在充分理解项目结构后，才能进入发现阶段\n\n" +
                 "### 1. 发现 (Discovery)\n" +
                 "启动 Explore 子代理收集上下文、可作为实现模板的类似已有功能、以及潜在阻碍或歧义。\n" +
                 "当任务跨越多个独立区域（如前后端、不同功能、不同仓库）时，并行启动 2-3 个 Explore 子代理。\n\n" +

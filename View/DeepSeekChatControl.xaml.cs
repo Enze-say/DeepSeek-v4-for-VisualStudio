@@ -96,6 +96,21 @@ namespace DeepSeek_v4_for_VisualStudio.View
         // ── 最近一次 Agent 执行的文件变更（临时存储，RunAgentWorkflowAsync 写入，RecordAgentFileChanges 消费后清空）──
         private List<Models.FileChangeSummary>? _pendingAgentFileChanges;
 
+        // ── Agent 流式日志面板 ID（会话级，不依赖 PlanId）──
+        private string _agentLogPanelId = "session";
+
+        // ── 已创建的计划 ID 集合（防止重复创建计划消息）──
+        private readonly HashSet<string> _createdPlanIds = new();
+
+        // ── 待回放的 Agent 日志条目（面板因全量刷新被销毁时用于恢复）──
+        private readonly List<AgentLogEntry> _pendingLogEntries = new();
+
+        // ── Agent 实时思考气泡 ──
+        private int _agentStreamingMsgIndex = -1;
+        private readonly StringBuilder _agentThinkingContent = new();
+        private int _lastReportedStepIndex;
+        private string _lastReportedStepStatus = string.Empty;
+
         #endregion
 
         #region Constructors

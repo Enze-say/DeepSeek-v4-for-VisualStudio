@@ -1,5 +1,6 @@
-using DeepSeek_v4_for_VisualStudio.Models;
+﻿using DeepSeek_v4_for_VisualStudio.Models;
 using DeepSeek_v4_for_VisualStudio.Services;
+using DeepSeek_v4_for_VisualStudio.Services.Agents;
 using DeepSeek_v4_for_VisualStudio.ToolWindows;
 using DeepSeek_v4_for_VisualStudio.Utils;
 using EnvDTE80;
@@ -1207,7 +1208,7 @@ namespace DeepSeek_v4_for_VisualStudio.View
             }
         }
 
-        private void CoreWebView2_WebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
+        private async void CoreWebView2_WebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
         {
             try
             {
@@ -1266,6 +1267,44 @@ namespace DeepSeek_v4_for_VisualStudio.View
                                 {
                                     await ChatWebView.CoreWebView2.ExecuteScriptAsync(
                                         "var p=document.getElementById('agent-permission');if(p)p.remove();");
+                                }
+                                catch { }
+                            }
+                        });
+                    }
+                    else if (type == "fileDeleteConfirm")
+                    {
+                        string requestId = obj.TryGetProperty("requestId", out var delReqIdProp)
+                            ? delReqIdProp.GetString() ?? string.Empty : string.Empty;
+                        bool confirmed = obj.TryGetProperty("confirmed", out var confProp)
+                            && confProp.GetBoolean();
+
+                        // 从活跃 Agent 的待处理权限中获取文件路径
+                        var pendingPermission = _agentDispatcher?.PendingPermission;
+                        List<string> filePaths = pendingPermission?.FilePaths ?? new List<string>();
+
+                        if (confirmed && filePaths.Count > 0)
+                        {
+                            // 通过 EnvDTE 执行实际删除
+                            await AgentDispatcher.DeleteFilesViaEnvDTEAsync(filePaths);
+                        }
+
+                        // 完成权限响应（解除 Agent 等待）
+                        _agentDispatcher?.RespondToPermission(requestId, confirmed);
+
+                        // 移除文件删除确认 UI
+                        _ = ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
+                        {
+                            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                            if (ChatWebView.CoreWebView2 != null)
+                            {
+                                try
+                                {
+                                    await ChatWebView.CoreWebView2.ExecuteScriptAsync(
+                                        "var p=document.getElementById('file-delete-confirm');if(p)p.remove();");
+                                    StatusLabel.Text = confirmed
+                                        ? $"✅ 已删除 {filePaths.Count} 个文件"
+                                        : "❌ 已取消删除";
                                 }
                                 catch { }
                             }

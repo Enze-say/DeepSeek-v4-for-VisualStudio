@@ -82,6 +82,9 @@ namespace DeepSeek_v4_for_VisualStudio.Models
     /// </summary>
     public class AgentTaskPlan
     {
+        /// <summary>计划唯一 ID（用于 WebView DOM 元素 ID 前缀，避免多计划冲突）</summary>
+        public string PlanId { get; set; } = Guid.NewGuid().ToString("N").Substring(0, 8);
+
         /// <summary>用户请求的意图类型</summary>
         public AgentIntent Intent { get; set; } = AgentIntent.QandA;
 
@@ -138,7 +141,10 @@ namespace DeepSeek_v4_for_VisualStudio.Models
         public string Command { get; set; } = string.Empty;
 
         /// <summary>操作类型</summary>
-        public string ActionType { get; set; } = "command"; // "command" | "file_write" | "web_access"
+        public string ActionType { get; set; } = "command"; // "command" | "file_write" | "web_access" | "file_delete"
+
+        /// <summary>待删除的文件路径列表（ActionType = "file_delete" 时使用）</summary>
+        public List<string> FilePaths { get; set; } = new();
 
         /// <summary>等待用户响应的 TaskCompletionSource</summary>
         [JsonIgnore]
@@ -153,5 +159,24 @@ namespace DeepSeek_v4_for_VisualStudio.Models
         public DateTime Timestamp { get; set; } = DateTime.Now;
         public string Level { get; set; } = "INFO"; // INFO, WARN, ERROR
         public string Message { get; set; } = string.Empty;
+    }
+
+    /// <summary>
+    /// Agent 文件变更实时通知事件参数。
+    /// 用于在编辑阶段逐文件实时推送变更信息到 WebView。
+    /// </summary>
+    public class AgentFileChangeEventArgs
+    {
+        /// <summary>关联的计划 ID</summary>
+        public string PlanId { get; set; } = string.Empty;
+
+        /// <summary>变更类型: modify, create, delete</summary>
+        public string ChangeType { get; set; } = "modify";
+
+        /// <summary>文件绝对路径</summary>
+        public string FilePath { get; set; } = string.Empty;
+
+        /// <summary>变更详情（如 +15 -3 行）</summary>
+        public string Detail { get; set; } = string.Empty;
     }
 }

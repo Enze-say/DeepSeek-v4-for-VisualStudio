@@ -51,8 +51,26 @@ namespace DeepSeek_v4_for_VisualStudio.Services
         /// </summary>
         public List<ToolDefinition> GetToolDefinitions()
         {
+            return GetFilteredToolDefinitions(null);
+        }
+
+        /// <summary>
+        /// 获取经过白名单过滤的工具定义。
+        /// 当 <paramref name="allowedTools"/> 不为 null/空时，仅返回名称在列表中的工具；
+        /// 为 null 时返回所有非内部工具（等同于 <see cref="GetToolDefinitions()"/>）。
+        /// </summary>
+        /// <param name="allowedTools">允许的工具名称白名单。null 表示不过滤。</param>
+        public List<ToolDefinition> GetFilteredToolDefinitions(List<string>? allowedTools)
+        {
             var tools = AllTools;
             var definitions = new List<ToolDefinition>();
+
+            // ── 构建白名单快速查找集合（仅当指定时）──
+            HashSet<string>? whitelist = null;
+            if (allowedTools != null && allowedTools.Count > 0)
+            {
+                whitelist = new HashSet<string>(allowedTools, StringComparer.OrdinalIgnoreCase);
+            }
 
             foreach (var tool in tools)
             {
@@ -63,6 +81,12 @@ namespace DeepSeek_v4_for_VisualStudio.Services
                 if (isInternalOnly)
                 {
                     Logger.Info($"[MCP] 跳过内部工具 (不暴露给 AI): {tool.Name}");
+                    continue;
+                }
+
+                // ── 白名单过滤：仅允许 Agent 声明的工具 ──
+                if (whitelist != null && !whitelist.Contains(tool.Name))
+                {
                     continue;
                 }
 
@@ -79,6 +103,11 @@ namespace DeepSeek_v4_for_VisualStudio.Services
                     Type = "function",
                     Function = func
                 });
+            }
+
+            if (whitelist != null)
+            {
+                Logger.Info($"[MCP] 白名单过滤: {definitions.Count}/{tools.Count} 个工具 (允许: [{string.Join(", ", allowedTools!)}])");
             }
 
             return definitions;

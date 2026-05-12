@@ -139,6 +139,12 @@ namespace DeepSeek_v4_for_VisualStudio.Models
         /// <summary>CancellationToken</summary>
         [JsonIgnore]
         public CancellationToken CancellationToken { get; set; } = CancellationToken.None;
+
+        /// <summary>是否处于 Planning 模式（多步骤计划执行中）。为 true 时跳过每步编译，最后统一构建。</summary>
+        public bool IsPlanningMode { get; set; }
+
+        /// <summary>Planning 模式下累积的上下文（前面步骤的结果和文件变更信息，供后续步骤继承）。</summary>
+        public string? AccumulatedContext { get; set; }
     }
 
     /// <summary>

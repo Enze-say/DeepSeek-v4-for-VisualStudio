@@ -39,6 +39,12 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
         /// <summary>当前活跃的 Agent 类型</summary>
         public AgentType ActiveAgentType { get; private set; } = AgentType.Ask;
 
+        /// <summary>
+        /// 获取当前活跃 Agent 允许使用的工具名称列表。
+        /// 用于过滤 MCP 工具定义，确保 Agent 只能调用其声明 whitelist 中的工具。
+        /// </summary>
+        public List<string>? ActiveAgentAllowedTools => GetActiveAgent()?.Definition.AllowedTools;
+
         /// <summary>当前正在执行的任务计划</summary>
         public AgentTaskPlan? ActivePlan { get; set; }
 
@@ -49,6 +55,7 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
         public event Action<AgentTaskPlan>? PlanUpdated;
         public event Action<AgentPermissionRequest>? PermissionRequested;
         public event Action<AgentLogEntry>? LogEntryAdded;
+        public event Action<AgentFileChangeEventArgs>? FileChangeNotified;
 
         public AgentDispatcher(DeepSeekApiService apiService)
         {
@@ -105,11 +112,20 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
                 editAgent.PlanUpdated += OnEditAgentPlanUpdated;
             }
 
+            // ── 注入 ExploreAgent 到 AskAgent，使其能委托探索任务 ──
+            if (agent is AskAgent askAgent)
+            {
+                if (askAgent.ExploreAgent == null)
+                    askAgent.ExploreAgent = ExploreAgent;
+            }
+
             // 绑定事件（如果尚未绑定）
             agent.PermissionRequested -= OnAgentPermissionRequested;
             agent.PermissionRequested += OnAgentPermissionRequested;
             agent.LogEntryAdded -= OnAgentLogEntryAdded;
             agent.LogEntryAdded += OnAgentLogEntryAdded;
+            agent.FileChangeNotified -= OnAgentFileChangeNotified;
+            agent.FileChangeNotified += OnAgentFileChangeNotified;
 
             return agent;
         }
@@ -124,6 +140,11 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
         private void OnAgentLogEntryAdded(AgentLogEntry entry)
         {
             LogEntryAdded?.Invoke(entry);
+        }
+
+        private void OnAgentFileChangeNotified(AgentFileChangeEventArgs args)
+        {
+            FileChangeNotified?.Invoke(args);
         }
 
         private void OnEditAgentPlanUpdated(AgentTaskPlan plan)
@@ -452,6 +473,140 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
         public void RespondToPermission(string requestId, bool approved)
         {
             GetActiveAgent()?.RespondToPermission(requestId, approved);
+        }
+
+        /// <summary>
+        /// 响应文件删除确认：先完成权限响应，若确认则通过 EnvDTE 执行实际删除。
+        /// </summary>
+        /// <param name="requestId">权限请求 ID</param>
+        /// <param name="approved">用户是否确认删除</param>
+        /// <param name="filePaths">待删除的文件绝对路径列表</param>
+        public async Task RespondToFileDeletePermissionAsync(string requestId, bool approved, List<string> filePaths)
+        {
+            // 先完成权限响应（解除 Agent 的等待）
+            GetActiveAgent()?.RespondToPermission(requestId, approved);
+
+            if (approved && filePaths != null && filePaths.Count > 0)
+            {
+                await DeleteFilesViaEnvDTEAsync(filePaths);
+            }
+        }
+
+        /// <summary>
+        /// 通过 EnvDTE 项目系统删除文件。
+        /// 先尝试通过 ProjectItem.Delete() 从项目中移除，再删除磁盘文件。
+        /// 必须在 UI 主线程上调用。
+        /// </summary>
+        /// <param name="filePaths">待删除的文件绝对路径列表</param>
+        public static async Task DeleteFilesViaEnvDTEAsync(List<string> filePaths)
+        {
+            if (filePaths == null || filePaths.Count == 0) return;
+
+            await Microsoft.VisualStudio.Shell.ThreadHelper.JoinableTaskFactory
+                .SwitchToMainThreadAsync();
+
+            var dte = (EnvDTE.DTE?)Microsoft.VisualStudio.Shell.ServiceProvider.GlobalProvider
+                .GetService(typeof(EnvDTE.DTE));
+            if (dte == null || dte.Solution == null || !dte.Solution.IsOpen)
+            {
+                // 回退：仅删除磁盘文件
+                foreach (string fp in filePaths)
+                {
+                    try { if (System.IO.File.Exists(fp)) System.IO.File.Delete(fp); }
+                    catch (Exception ex) { Logger.Warn($"[AgentDispatcher] 磁盘删除失败: {fp} - {ex.Message}"); }
+                }
+                Logger.Warn("[AgentDispatcher] DTE 不可用，仅执行磁盘文件删除");
+                return;
+            }
+
+            foreach (string filePath in filePaths)
+            {
+                try
+                {
+                    // 尝试查找 ProjectItem 并从项目中移除
+                    EnvDTE.ProjectItem? item = FindProjectItemByPath(dte, filePath);
+                    if (item != null)
+                    {
+                        item.Delete();
+                        Logger.Info($"[AgentDispatcher] ✅ 已通过 EnvDTE 从项目中删除: {filePath}");
+                    }
+                    else
+                    {
+                        // 未找到 ProjectItem，直接删除磁盘文件
+                        if (System.IO.File.Exists(filePath))
+                        {
+                            System.IO.File.Delete(filePath);
+                            Logger.Info($"[AgentDispatcher] ✅ 已从磁盘删除: {filePath}");
+                        }
+                        else
+                        {
+                            Logger.Warn($"[AgentDispatcher] 文件不存在，跳过: {filePath}");
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warn($"[AgentDispatcher] 删除文件失败: {filePath} - {ex.Message}");
+                }
+            }
+        }
+
+        /// <summary>
+        /// 在解决方案中递归查找匹配给定路径的 ProjectItem。
+        /// </summary>
+        private static EnvDTE.ProjectItem? FindProjectItemByPath(EnvDTE.DTE dte, string filePath)
+        {
+            try
+            {
+                foreach (EnvDTE.Project project in dte.Solution.Projects)
+                {
+                    var result = FindProjectItemRecursive(project.ProjectItems, filePath);
+                    if (result != null) return result;
+                }
+            }
+            catch { }
+            return null;
+        }
+
+        /// <summary>
+        /// 递归搜索 ProjectItems 匹配文件路径。
+        /// </summary>
+        private static EnvDTE.ProjectItem? FindProjectItemRecursive(
+            EnvDTE.ProjectItems? items, string filePath)
+        {
+            if (items == null) return null;
+
+            foreach (EnvDTE.ProjectItem item in items)
+            {
+                try
+                {
+                    // 获取 ProjectItem 的完整路径（通过 Properties）
+                    string? itemPath = null;
+                    try
+                    {
+                        itemPath = item.Properties?.Item("FullPath")?.Value?.ToString();
+                    }
+                    catch { }
+
+                    if (!string.IsNullOrEmpty(itemPath) &&
+                        string.Equals(itemPath, filePath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return item;
+                    }
+
+                    // 递归搜索子项
+                    if (item.ProjectItems != null && item.ProjectItems.Count > 0)
+                    {
+                        var found = FindProjectItemRecursive(item.ProjectItems, filePath);
+                        if (found != null) return found;
+                    }
+                }
+                catch
+                {
+                    // 跳过无法访问的 ProjectItem
+                }
+            }
+            return null;
         }
 
         #endregion

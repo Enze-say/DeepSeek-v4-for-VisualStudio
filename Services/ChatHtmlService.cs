@@ -174,6 +174,60 @@ img{max-width:100%}
 .agent-plan-footer{display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid #2A2A3A;font-size:11px;color:#666}
 .agent-plan-footer .elapsed{color:#555}
 .agent-plan-footer .step-counter{color:#888}
+
+/* ── 文件删除确认卡片 ── */
+.file-delete-card{margin:8px 0;border:1px solid #D16969;border-radius:8px;background:#2E1A1A;overflow:hidden;animation:fadeIn .3s}
+.file-delete-card-header{padding:8px 12px;background:#3E1A1A;border-bottom:1px solid #5A2A2A;display:flex;align-items:center;gap:8px}
+.file-delete-card-header .icon{font-size:16px}
+.file-delete-card-header .title{color:#E07878;font-size:13px;font-weight:700}
+.file-delete-card-body{padding:10px 12px}
+.file-delete-card-body .warning-text{color:#D4A0A0;font-size:12px;margin-bottom:8px;line-height:1.5}
+.file-delete-card-body .file-list{max-height:200px;overflow-y:auto;margin-bottom:10px}
+.file-delete-card-body .file-item{display:flex;align-items:center;gap:6px;padding:3px 0;color:#D4A0A0;font-size:11px;font-family:'Cascadia Code',Consolas,monospace}
+.file-delete-card-body .file-item .file-icon{color:#E07878;flex-shrink:0}
+.file-delete-card-body .file-item .file-path{word-break:break-all}
+.file-delete-card-footer{display:flex;gap:8px;padding:8px 12px;border-top:1px solid #3A1A1A}
+.file-delete-card-footer button{padding:5px 18px;border-radius:4px;cursor:pointer;font-size:12px;font-weight:600;transition:all .15s;border:none}
+.file-delete-btn-confirm{background:#8B2020;color:#FFC0C0;border:1px solid #C04040 !important}
+.file-delete-btn-confirm:hover{background:#A03030;color:#FFE0E0}
+.file-delete-btn-cancel{background:#3C3C3C;color:#CCC;border:1px solid #555 !important}
+.file-delete-btn-cancel:hover{background:#4A4A4A;color:#FFF}
+
+/* ── Agent 规划过程流式日志面板 ── */
+.agent-log-panel{margin:4px 0 8px 0;border:1px solid #2A3A5A;border-radius:6px;background:#121A24;overflow:hidden;animation:fadeIn .3s}
+.agent-log-panel-header{padding:4px 10px;background:#1A2636;border-bottom:1px solid #2A3A5A;display:flex;align-items:center;gap:6px;cursor:pointer}
+.agent-log-panel-header .log-icon{font-size:13px}
+.agent-log-panel-header .log-title{color:#7EB8E0;font-size:11px;font-weight:600}
+.agent-log-panel-header .log-count{color:#5A7A9A;font-size:10px}
+.agent-log-panel-body{padding:4px 0;max-height:300px;overflow-y:auto;font-size:11px;font-family:'Cascadia Code',Consolas,monospace;line-height:1.5}
+.agent-log-panel-body .log-line{padding:1px 10px;color:#6A8AAA;white-space:pre-wrap;word-break:break-word;animation:logSlideIn .2s ease-out}
+.agent-log-panel-body .log-line.warn{color:#C8A84E}
+.agent-log-panel-body .log-line.error{color:#E07878}
+.agent-log-panel-body .log-line.info{color:#6A8AAA}
+.agent-log-panel-body .log-line.success{color:#4EC9B0}
+@keyframes logSlideIn{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:translateX(0)}}
+
+/* ── 实时文件变更通知条 ── */
+.agent-file-notify{display:flex;align-items:center;gap:6px;padding:3px 10px;margin:2px 0;border-radius:4px;font-size:11px;font-family:'Cascadia Code',Consolas,monospace;animation:logSlideIn .25s ease-out}
+.agent-file-notify.modify{background:#1A2E1A;color:#4EC9B0;border-left:2px solid #4EC9B0}
+.agent-file-notify.create{background:#1A2E2E;color:#6CAFD9;border-left:2px solid #6CAFD9}
+.agent-file-notify.delete{background:#2E1A1A;color:#E07878;border-left:2px solid #E07878}
+
+/* ── Agent 任务流程底部面板（替代独立计划消息，固定在聊天底部）── */
+.agent-task-panel{margin:8px 0 4px 0;border:1px solid #3A5A8A;border-radius:8px;background:linear-gradient(180deg,#1A2436 0%,#1A1E2E 100%);overflow:hidden;animation:taskSlideUp .35s ease-out}
+.agent-task-panel.collapsed .agent-task-panel-body{display:none}
+.agent-task-panel-header{display:flex;align-items:center;gap:8px;padding:8px 12px;background:#1A2636;border-bottom:1px solid #2A3A5A;cursor:pointer;user-select:none;flex-wrap:wrap}
+.agent-task-panel-header .task-icon{font-size:14px}
+.agent-task-panel-header .task-title{color:#7EB8E0;font-size:12px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.agent-task-panel-header .task-progress{color:#888;font-size:11px;white-space:nowrap}
+.agent-task-panel-header .task-close{background:transparent;border:1px solid #555;color:#888;cursor:pointer;font-size:14px;width:22px;height:22px;border-radius:3px;display:flex;align-items:center;justify-content:center;transition:all .15s;padding:0;line-height:1;flex-shrink:0}
+.agent-task-panel-header .task-close:hover{background:#3C1A1A;color:#E07878;border-color:#6A3A3A}
+.agent-task-panel-body{padding:10px 12px;max-height:320px;overflow-y:auto;font-size:12px;line-height:1.5}
+.agent-task-panel-body .task-empty{color:#666;font-size:11px;font-style:italic;padding:8px 0}
+/* 面板内复用 agent-plan 的步骤样式，但不显示 plan 的 margin/border */
+.agent-task-panel-body .agent-plan{border:none;background:transparent;padding:0;margin:0}
+.agent-task-panel-body .agent-plan::before{display:none}
+@keyframes taskSlideUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
 ";
 
         private const string AiAvatarHtml = "<span class='avatar avatar-ai'>AI</span>";
@@ -273,9 +327,23 @@ img{max-width:100%}
         /// </summary>
         public static string BuildFinalRenderJs(int messageIndex, string fullContent, string reasoningContent)
         {
+            return BuildFinalRenderJs(messageIndex, fullContent, reasoningContent, null);
+        }
+
+        /// <summary>
+        /// 构建流式完成后替换为完整 Markdown 渲染的 JS 脚本（带额外尾部 HTML）。
+        /// extraFooterHtml 会以原始 HTML 形式注入到正文后面（不经过 Markdown 渲染），
+        /// 用于 &lt;details&gt; 折叠面板等需要原生 HTML 的元素。
+        /// </summary>
+        public static string BuildFinalRenderJs(int messageIndex, string fullContent, string reasoningContent, string? extraFooterHtml)
+        {
             // 在 C# 侧完成 Markdown → HTML 渲染
             string bodyHtml = RenderMarkdownToHtml(fullContent ?? string.Empty);
             string escapedBody = EscapeJsString(bodyHtml);
+
+            string footerJs = string.IsNullOrWhiteSpace(extraFooterHtml)
+                ? "''"
+                : EscapeJsString(extraFooterHtml);
 
             string reasoningHtml = string.IsNullOrWhiteSpace(reasoningContent)
                 ? string.Empty
@@ -292,6 +360,13 @@ img{max-width:100%}
 
     if(container){{
         container.innerHTML={escapedBody};
+        // ── 注入额外尾部 HTML（如执行过程 &lt;details&gt; 面板）──
+        var footerHtml={footerJs};
+        if(footerHtml.length>0){{
+            var footerDiv=document.createElement('div');
+            footerDiv.innerHTML=footerHtml;
+            container.appendChild(footerDiv);
+        }}
     }}
 
     if(cursor) cursor.style.display='none';
@@ -537,7 +612,7 @@ img{max-width:100%}
             string streamingDots = isStreaming
                 ? " <span style='color:#6CAFD9;font-size:10px'>●●●</span>" : "";
 
-            // ── 重试按钮（非流式、非预渲染 HTML 消息才显示） ──
+            // ── 重试按钮（非流式、非预渲染 HTML 消息、非生成中才显示） ──
             string retryBtnHtml = !isStreaming && !msg.IsHtml
                 ? $"<button class='msg-action-btn retry-btn' onclick='window.__retryMessage({idx})' title='重新生成回答'>🔄 重试</button>"
                 : "";
@@ -970,6 +1045,12 @@ window.__agentApprove=function(requestId){
 };
 window.__agentDeny=function(requestId){
     window.__sendToHost({type:'agentApprove',requestId:requestId,approved:false});
+};
+window.__fileDeleteConfirm=function(requestId){
+    window.__sendToHost({type:'fileDeleteConfirm',requestId:requestId,confirmed:true});
+};
+window.__fileDeleteCancel=function(requestId){
+    window.__sendToHost({type:'fileDeleteConfirm',requestId:requestId,confirmed:false});
 };";
         }
 
@@ -981,21 +1062,22 @@ window.__agentDeny=function(requestId){
         /// </summary>
         public static string BuildAgentPlanHtml(AgentTaskPlan plan)
         {
+            string pid = plan.PlanId;
             int completed = plan.Steps.Count(s => s.Status == AgentStepStatus.Completed);
             int failed = plan.Steps.Count(s => s.Status == AgentStepStatus.Failed);
             int total = plan.Steps.Count;
             int progressPercent = total > 0 ? (completed + failed) * 100 / total : 0;
 
             var sb = new StringBuilder();
-            sb.Append("<div class='agent-plan'>");
+            sb.Append($"<div class='agent-plan' id='agent-plan-{pid}'>");
 
             // ── 头部：标题 + 进度条 ──
             sb.Append("<div class='agent-plan-header'>");
             sb.Append($"<div class='agent-plan-title'>🤖 Coding Agent — {EscapeHtml(plan.Title)}</div>");
             sb.Append("<div class='agent-plan-progress'>");
-            sb.Append($"<span class='step-counter'>{completed}/{total} 步</span>");
+            sb.Append($"<span class='step-counter' id='agent-header-counter-{pid}'>{completed}/{total} 步</span>");
             sb.Append("<span class='agent-plan-progress-bar'>");
-            sb.Append($"<span class='agent-plan-progress-bar-fill' id='agent-progress-fill' style='width:{progressPercent}%'></span>");
+            sb.Append($"<span class='agent-plan-progress-bar-fill' id='agent-progress-fill-{pid}' style='width:{progressPercent}%'></span>");
             sb.Append("</span></div></div>");
 
             // ── 步骤管线节点 ──
@@ -1024,7 +1106,6 @@ window.__agentDeny=function(requestId){
                     _ => step.Index.ToString(),
                 };
 
-                // 步骤类型标签
                 string tagHtml = "";
                 if (IsCodeWritingStepName(step.Title))
                     tagHtml = "<span class='agent-step-tag code'>代码</span>";
@@ -1033,52 +1114,38 @@ window.__agentDeny=function(requestId){
                 else if (IsAnalyzeStepName(step.Title))
                     tagHtml = "<span class='agent-step-tag analyze'>分析</span>";
 
-                // 连接线的样式
                 string lineClass = step.Status == AgentStepStatus.Completed ? "done"
                     : step.Status == AgentStepStatus.InProgress ? "active"
                     : "";
 
-                sb.Append($"<div class='agent-step-node' id='agent-step-node-{step.Index}'>");
+                sb.Append($"<div class='agent-step-node' id='agent-step-node-{pid}-{step.Index}'>");
 
-                // ── 编号圆圈 + 连接线 ──
                 sb.Append("<div class='agent-step-bullet-wrap'>");
-                sb.Append($"<div class='agent-step-bullet {statusClass}' id='agent-bullet-{step.Index}'>{bulletText}</div>");
+                sb.Append($"<div class='agent-step-bullet {statusClass}' id='agent-bullet-{pid}-{step.Index}'>{bulletText}</div>");
                 if (!isLast)
-                    sb.Append($"<div class='agent-step-line {lineClass}' id='agent-line-{step.Index}'></div>");
+                    sb.Append($"<div class='agent-step-line {lineClass}' id='agent-line-{pid}-{step.Index}'></div>");
                 sb.Append("</div>");
 
-                // ── 步骤内容 ──
                 sb.Append("<div class='agent-step-content'>");
                 sb.Append("<div class='agent-step-title-row'>");
-                sb.Append($"<span class='agent-step-title {statusClass}' id='agent-title-{step.Index}'>{EscapeHtml(step.Title)}</span>");
+                sb.Append($"<span class='agent-step-title {statusClass}' id='agent-title-{pid}-{step.Index}'>{EscapeHtml(step.Title)}</span>");
                 if (!string.IsNullOrEmpty(tagHtml))
                     sb.Append(tagHtml);
                 sb.Append("</div>");
 
-                // 结果摘要
                 string summaryDisplay = string.IsNullOrEmpty(step.ResultSummary) ? "none" : "block";
-                sb.Append($"<div class='agent-step-summary' id='agent-summary-{step.Index}' style='display:{summaryDisplay}'>");
+                sb.Append($"<div class='agent-step-summary' id='agent-summary-{pid}-{step.Index}' style='display:{summaryDisplay}'>");
                 if (!string.IsNullOrEmpty(step.ResultSummary))
                     sb.Append(EscapeHtml(step.ResultSummary!));
                 sb.Append("</div>");
-
-                // 详情区（AI 响应，可折叠）
-                bool hasDetail = !string.IsNullOrEmpty(step.AiResponse);
-                string detailClass = hasDetail ? "agent-step-detail show" : "agent-step-detail";
-                if (hasDetail && statusClass is "in-progress" or "completed" or "failed")
-                    detailClass += $" {statusClass}";
-                string detailContent = hasDetail
-                    ? EscapeHtml(step.AiResponse!.Length > 600 ? step.AiResponse.Substring(0, 600) + "…" : step.AiResponse)
-                    : "";
-                sb.Append($"<div class='{detailClass}' id='agent-detail-{step.Index}'>{detailContent}</div>");
 
                 sb.Append("</div></div>");
             }
 
             // ── 底部状态栏 ──
             sb.Append("<div class='agent-plan-footer'>");
-            sb.Append($"<span class='elapsed' id='agent-elapsed'></span>");
-            sb.Append($"<span class='step-counter' id='agent-step-counter'>{completed}/{total} 步完成</span>");
+            sb.Append($"<span class='elapsed' id='agent-elapsed-{pid}'></span>");
+            sb.Append($"<span class='step-counter' id='agent-step-counter-{pid}'>{completed}/{total} 步完成</span>");
             if (failed > 0)
                 sb.Append($"<span style='color:#E07878'>⚠ {failed} 步失败</span>");
             sb.Append("</div>");
@@ -1129,6 +1196,7 @@ window.__agentDeny=function(requestId){
         /// </summary>
         public static string BuildAgentProgressUpdateJs(AgentTaskPlan plan)
         {
+            string pid = plan.PlanId;
             int completed = plan.Steps.Count(s => s.Status == AgentStepStatus.Completed);
             int failed = plan.Steps.Count(s => s.Status == AgentStepStatus.Failed);
             int total = plan.Steps.Count;
@@ -1159,16 +1227,13 @@ window.__agentDeny=function(requestId){
                     _ => step.Index.ToString(),
                 };
 
-                // ── 更新步骤圆形编号 ──
-                sb.Append($"var b=document.getElementById('agent-bullet-{step.Index}');");
+                sb.Append($"var b=document.getElementById('agent-bullet-{pid}-{step.Index}');");
                 sb.Append($"if(b){{b.className='agent-step-bullet {statusClass}';b.textContent='{bulletText}';}}");
 
-                // ── 更新步骤标题 ──
-                sb.Append($"var t=document.getElementById('agent-title-{step.Index}');");
+                sb.Append($"var t=document.getElementById('agent-title-{pid}-{step.Index}');");
                 sb.Append($"if(t){{t.className='agent-step-title {statusClass}';}}");
 
-                // ── 更新步骤摘要 ──
-                sb.Append($"var s=document.getElementById('agent-summary-{step.Index}');");
+                sb.Append($"var s=document.getElementById('agent-summary-{pid}-{step.Index}');");
                 if (!string.IsNullOrEmpty(step.ResultSummary))
                 {
                     sb.Append($"if(s){{s.style.display='block';s.textContent={EscapeJsString(step.ResultSummary!)};}}");
@@ -1178,41 +1243,27 @@ window.__agentDeny=function(requestId){
                     sb.Append("if(s){s.style.display='none';}");
                 }
 
-                // ── 更新步骤详情区 ──
-                sb.Append($"var d=document.getElementById('agent-detail-{step.Index}');");
-                if (!string.IsNullOrEmpty(step.AiResponse))
-                {
-                    string detailText = step.AiResponse!.Length > 600
-                        ? step.AiResponse.Substring(0, 600) + "…"
-                        : step.AiResponse;
-                    sb.Append($"if(d){{d.className='agent-step-detail show {statusClass}';");
-                    sb.Append($"d.textContent={EscapeJsString(detailText)};}}");
-                }
-                else
-                {
-                    sb.Append($"if(d){{d.className='agent-step-detail';d.textContent='';}}");
-                }
-
-                // ── 更新连接线 ──
                 string lineClass = step.Status == AgentStepStatus.Completed ? "done"
                     : step.Status == AgentStepStatus.InProgress ? "active"
                     : "";
-                sb.Append($"var l=document.getElementById('agent-line-{step.Index}');");
+                sb.Append($"var l=document.getElementById('agent-line-{pid}-{step.Index}');");
                 sb.Append($"if(l){{l.className='agent-step-line {lineClass}';}}");
             }
 
-            // ── 更新进度条 ──
-            sb.Append($"var pf=document.getElementById('agent-progress-fill');");
+            sb.Append($"var pf=document.getElementById('agent-progress-fill-{pid}');");
             sb.Append($"if(pf){{pf.style.width='{progressPercent}%';}}");
 
-            // ── 更新进度计数器 ──
-            sb.Append($"var pc=document.getElementById('agent-step-counter');");
+            // 更新头部步骤计数器
+            sb.Append($"var hc=document.getElementById('agent-header-counter-{pid}');");
+            string headerCounterText = $"{completed}/{total} 步";
+            sb.Append($"if(hc){{hc.textContent='{EscapeJsString(headerCounterText)}';}}");
+
+            sb.Append($"var pc=document.getElementById('agent-step-counter-{pid}');");
             string counterText = failed > 0
                 ? $"{completed}/{total} 步完成，{failed} 步失败"
                 : $"{completed}/{total} 步完成";
             sb.Append($"if(pc){{pc.textContent='{EscapeJsString(counterText)}';}}");
 
-            // ── 自动滚动到底部 ──
             sb.Append("window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'});");
             sb.Append("})();");
             return sb.ToString();
@@ -1332,6 +1383,145 @@ window.__agentDeny=function(requestId){
         }
 
         /// <summary>
+        /// 去除 AI 响应中的代码围栏块（```...```），仅保留自然语言描述部分。
+        /// 用于步骤详情区展示，避免渲染大段代码。
+        /// </summary>
+        private static string StripCodeFences(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return text;
+            // 移除 ```...``` 代码块（含语言标注行如 ```file:... 和 ```cpp）
+            var result = System.Text.RegularExpressions.Regex.Replace(
+                text,
+                @"```[\s\S]*?```",
+                " [代码块已省略] ",
+                System.Text.RegularExpressions.RegexOptions.Multiline);
+            // 清理多余空行
+            result = System.Text.RegularExpressions.Regex.Replace(
+                result, @"\n{3,}", "\n\n");
+            return result.Trim();
+        }
+
+        /// <summary>
+        /// 构建 Agent 流式日志面板的初始化 JS。
+        /// 在聊天底部创建一个可折叠的日志面板，用于逐行展示规划/执行过程。
+        /// </summary>
+        /// <param name="planId">关联的计划 ID，用于唯一标识面板</param>
+        /// <param name="title">面板标题（如 "🧠 规划思考过程"）</param>
+        public static string BuildAgentLogStreamPanelJs(string planId, string title)
+        {
+            string escapedTitle = EscapeJsString(title);
+            string escapedPid = EscapeJsString(planId);
+
+            // 在 C# 侧构建完整 HTML，避免 JS 字符串嵌套转义
+            string headerHtml =
+                "<div class=\"agent-log-panel-header\" onclick=\"var b=document.getElementById('agent-log-body-"
+                + planId + "');if(b)b.style.display=b.style.display==='none'?'':'none'\">"
+                + "<span class=\"log-icon\">📋</span>"
+                + "<span class=\"log-title\">" + EscapeHtml(title) + "</span>"
+                + "<span class=\"log-count\" id=\"agent-log-count-" + planId + "\">0 条</span>"
+                + "</div>"
+                + "<div class=\"agent-log-panel-body\" id=\"agent-log-body-" + planId + "\"></div>";
+
+            string escapedInnerHtml = EscapeJsString(headerHtml);
+
+            return $@"
+(function(){{
+    var existing=document.getElementById('agent-log-panel-{escapedPid}');
+    if(existing)return;
+
+    var panel=document.createElement('div');
+    panel.id='agent-log-panel-{escapedPid}';
+    panel.className='agent-log-panel';
+    panel.innerHTML={escapedInnerHtml};
+
+    var container=document.getElementById('chat-container');
+    if(container)container.appendChild(panel);
+    window.scrollTo({{top:document.body.scrollHeight,behavior:'smooth'}});
+}})();";
+        }
+
+        /// <summary>
+        /// 向指定日志面板追加一条日志行的 JS 脚本。
+        /// </summary>
+        /// <param name="planId">关联的计划 ID</param>
+        /// <param name="level">日志级别: INFO, WARN, ERROR, SUCCESS</param>
+        /// <param name="message">日志内容</param>
+        public static string BuildAgentLogAppendJs(string planId, string level, string message)
+        {
+            string escapedPid = EscapeJsString(planId);
+            string escapedMsg = EscapeJsString(message);
+            string cssClass = level.ToLowerInvariant() switch
+            {
+                "warn" => "warn",
+                "error" => "error",
+                "success" => "success",
+                _ => "info",
+            };
+
+            return $@"
+(function(){{
+    var body=document.getElementById('agent-log-body-{escapedPid}');
+    if(!body)return;
+
+    var line=document.createElement('div');
+    line.className='log-line {cssClass}';
+    line.textContent={escapedMsg};
+    body.appendChild(line);
+
+    var count=document.getElementById('agent-log-count-{escapedPid}');
+    if(count){{var n=body.children.length;count.textContent=n+' 条';}}
+
+    body.scrollTop=body.scrollHeight;
+    window.scrollTo({{top:document.body.scrollHeight,behavior:'smooth'}});
+}})();";
+        }
+
+        /// <summary>
+        /// 构建实时文件变更通知条的 JS 脚本。
+        /// 在日志面板中追加一条带颜色标记的文件操作通知。
+        /// </summary>
+        /// <param name="planId">关联的计划 ID</param>
+        /// <param name="changeType">变更类型: modify, create, delete</param>
+        /// <param name="filePath">文件路径（仅显示文件名）</param>
+        /// <param name="detail">额外详情（如 +5 -3）</param>
+        public static string BuildAgentFileChangeNotifyJs(string planId, string changeType, string filePath, string detail)
+        {
+            string escapedPid = EscapeJsString(planId);
+            string fileName = System.IO.Path.GetFileName(filePath);
+            string escapedName = EscapeJsString(fileName);
+            string escapedDetail = EscapeJsString(detail);
+            string cssClass = changeType.ToLowerInvariant() switch
+            {
+                "create" => "create",
+                "delete" => "delete",
+                _ => "modify",
+            };
+            string icon = changeType.ToLowerInvariant() switch
+            {
+                "create" => "📄",
+                "delete" => "🗑️",
+                _ => "✏️",
+            };
+
+            return $@"
+(function(){{
+    var body=document.getElementById('agent-log-body-{escapedPid}');
+    if(!body)return;
+
+    var notify=document.createElement('div');
+    notify.className='agent-file-notify {cssClass}';
+    notify.textContent='{icon} '+{escapedName}+({escapedDetail});
+    body.appendChild(notify);
+
+    var count=document.getElementById('agent-log-count-{escapedPid}');
+    if(count){{var n=body.children.length;count.textContent=n+' 条';}}
+
+    body.scrollTop=body.scrollHeight;
+    window.scrollTo({{top:document.body.scrollHeight,behavior:'smooth'}});
+}})();";
+        }
+
+        /// <summary>
         /// 构建权限请求 UI 的 JS 脚本（在聊天底部注入确认/拒绝按钮）。
         /// </summary>
         public static string BuildPermissionRequestJs(AgentPermissionRequest request)
@@ -1366,6 +1556,77 @@ window.__agentDeny=function(requestId){
         }
 
         /// <summary>
+        /// 构建文件删除确认 UI 的 JS 脚本（在聊天底部注入文件列表 + 确认/取消按钮）。
+        /// </summary>
+        /// <param name="request">权限请求，其 ActionType 应为 "file_delete"，FilePaths 包含待删除文件路径列表</param>
+        public static string BuildFileDeleteConfirmationJs(AgentPermissionRequest request)
+        {
+            string escapedRequestId = EscapeJsString(request.RequestId);
+
+            // 构建文件列表 HTML（在 C# 侧完成，避免 JS 字符串嵌套转义）
+            var fileItemsHtml = new StringBuilder();
+            if (request.FilePaths != null && request.FilePaths.Count > 0)
+            {
+                foreach (string filePath in request.FilePaths)
+                {
+                    string fileName = System.IO.Path.GetFileName(filePath);
+                    fileItemsHtml.Append("<div class=\"file-item\">");
+                    fileItemsHtml.Append("<span class=\"file-icon\">📄</span>");
+                    fileItemsHtml.Append("<span class=\"file-path\" title=\"");
+                    fileItemsHtml.Append(EscapeHtml(filePath));
+                    fileItemsHtml.Append("\">");
+                    fileItemsHtml.Append(EscapeHtml(fileName));
+                    fileItemsHtml.Append("</span></div>");
+                }
+            }
+
+            // 构建完整的卡片 innerHTML
+            string cardInnerHtml =
+                "<div class=\"file-delete-card-header\">" +
+                "<span class=\"icon\">🗑️</span>" +
+                "<span class=\"title\">确认删除文件</span>" +
+                "</div>" +
+                "<div class=\"file-delete-card-body\">" +
+                "<div class=\"warning-text\">⚠️ 即将删除以下项目文件，此操作将通过 Visual Studio 项目系统执行（如文件已加入项目，也将从项目中移除）：</div>" +
+                "<div class=\"file-list\">" +
+                fileItemsHtml.ToString() +
+                "</div>" +
+                "<div class=\"warning-text\" style=\"color:#E07878;font-weight:600\">此操作不可撤销！是否继续？</div>" +
+                "</div>" +
+                "<div class=\"file-delete-card-footer\">" +
+                $"<button class=\"file-delete-btn-confirm\" onclick=\"window.__fileDeleteConfirm('{EscapeHtmlAttribute(request.RequestId)}')\">✅ 确认删除</button>" +
+                $"<button class=\"file-delete-btn-cancel\" onclick=\"window.__fileDeleteCancel('{EscapeHtmlAttribute(request.RequestId)}')\">❌ 取消</button>" +
+                "</div>";
+
+            string escapedInnerHtml = EscapeJsString(cardInnerHtml);
+
+            return $@"
+(function(){{
+    var existing=document.getElementById('file-delete-confirm');
+    if(existing)existing.remove();
+
+    var div=document.createElement('div');
+    div.id='file-delete-confirm';
+    div.className='file-delete-card';
+    div.innerHTML={escapedInnerHtml};
+
+    var container=document.getElementById('chat-container');
+    if(container)container.appendChild(div);
+    window.scrollTo({{top:document.body.scrollHeight,behavior:'smooth'}});
+}})();";
+        }
+
+        /// <summary>
+        /// 转义 HTML 属性值中的引号字符。
+        /// </summary>
+        private static string EscapeHtmlAttribute(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return string.Empty;
+            return value.Replace("&", "&amp;").Replace("\"", "&quot;").Replace("'", "&#39;")
+                        .Replace("<", "&lt;").Replace(">", "&gt;");
+        }
+
+        /// <summary>
         /// HTML 转义辅助方法。
         /// </summary>
         private static string EscapeHtml(string text)
@@ -1374,6 +1635,177 @@ window.__agentDeny=function(requestId){
             return System.Net.WebUtility.HtmlEncode(text);
         }
 
+        /// <summary>
+        /// 构建 Agent 任务流程底部面板的创建/更新 JS。
+        /// 如果面板不存在则创建，存在则更新内容。
+        /// 面板固定在聊天底部，包含步骤管线、文件变更、日志摘要。
+        /// </summary>
+        public static string BuildAgentTaskPanelCreateJs(AgentTaskPlan plan)
+        {
+            string pid = EscapeJsString(plan.PlanId);
+            string escapedTitle = EscapeJsString(plan.Title);
+            string planHtml = BuildAgentPlanHtml(plan);
+            // 移除 agent-plan 自带的外层 div 包装，只保留内部内容（因为面板有自己的 wrapper）
+            // 保留完整的 agent-plan div，在 CSS 中已去掉其 margin/border
+            string escapedPlanHtml = EscapeJsString(planHtml);
+            int completed = plan.Steps.Count(s => s.Status == AgentStepStatus.Completed);
+            int total = plan.Steps.Count;
+
+            return $@"
+(function(){{
+    var existing=document.getElementById('agent-task-panel-{pid}');
+    if(existing){{
+        // 更新面板内容
+        var body=document.getElementById('agent-task-body-{pid}');
+        if(body)body.innerHTML={escapedPlanHtml};
+        var prog=document.getElementById('agent-task-progress-{pid}');
+        if(prog)prog.textContent='{completed}/{total} 步';
+        return;
+    }}
+
+    // 创建新面板
+    var panel=document.createElement('div');
+    panel.id='agent-task-panel-{pid}';
+    panel.className='agent-task-panel';
+    panel.innerHTML=
+        '<div class=""agent-task-panel-header"" onclick=""var p=document.getElementById(\'agent-task-panel-{pid}\');if(p)p.classList.toggle(\'collapsed\')"">'+
+        '<span class=""task-icon"">🤖</span>'+
+        '<span class=""task-title"">Coding Agent — '+{escapedTitle}+'</span>'+
+        '<span class=""task-progress"" id=""agent-task-progress-{pid}"">{completed}/{total} 步</span>'+
+        '<button class=""task-close"" id=""agent-task-close-{pid}"" onclick=""(function(e){{e.stopPropagation();var p=document.getElementById(\'agent-task-panel-{pid}\');if(p&&p.parentNode)p.parentNode.removeChild(p);}})(event);return false;"" title=""关闭面板"">✕</button>'+
+        '</div>'+
+        '<div class=""agent-task-panel-body"" id=""agent-task-body-{pid}"">'+{escapedPlanHtml}+'</div>';
+
+    var container=document.getElementById('chat-container');
+    if(container)container.appendChild(panel);
+    window.scrollTo({{top:document.body.scrollHeight,behavior:'smooth'}});
+}})();";
+        }
+
+        /// <summary>
+        /// 构建更新任务面板步骤进度的 JS（仅更新步骤状态，不重建整个面板）。
+        /// </summary>
+        public static string BuildAgentTaskPanelUpdateJs(AgentTaskPlan plan)
+        {
+            string pid = EscapeJsString(plan.PlanId);
+            int completed = plan.Steps.Count(s => s.Status == AgentStepStatus.Completed);
+            int total = plan.Steps.Count;
+
+            var sb = new StringBuilder();
+            sb.Append("(function(){");
+
+            // 更新进度文本
+            sb.Append($"var prog=document.getElementById('agent-task-progress-{pid}');");
+            sb.Append($"if(prog)prog.textContent='{completed}/{total} 步';");
+
+            // 复用现有的步骤进度更新逻辑
+            foreach (var step in plan.Steps)
+            {
+                string statusClass = step.Status switch
+                {
+                    AgentStepStatus.Completed => "completed",
+                    AgentStepStatus.InProgress => "in-progress",
+                    AgentStepStatus.Failed => "failed",
+                    AgentStepStatus.Skipped => "skipped",
+                    AgentStepStatus.WaitingApproval => "waiting",
+                    _ => "pending",
+                };
+
+                string bulletText = step.Status switch
+                {
+                    AgentStepStatus.Completed => "✓",
+                    AgentStepStatus.InProgress => "●",
+                    AgentStepStatus.Failed => "✗",
+                    AgentStepStatus.Skipped => "—",
+                    AgentStepStatus.WaitingApproval => "?",
+                    _ => step.Index.ToString(),
+                };
+
+                sb.Append($"var b=document.getElementById('agent-bullet-{pid}-{step.Index}');");
+                sb.Append($"if(b){{b.className='agent-step-bullet {statusClass}';b.textContent='{bulletText}';}}");
+
+                sb.Append($"var t=document.getElementById('agent-title-{pid}-{step.Index}');");
+                sb.Append($"if(t){{t.className='agent-step-title {statusClass}';}}");
+
+                sb.Append($"var s=document.getElementById('agent-summary-{pid}-{step.Index}');");
+                if (!string.IsNullOrEmpty(step.ResultSummary))
+                {
+                    sb.Append($"if(s){{s.style.display='block';s.textContent={EscapeJsString(step.ResultSummary!)};}}");
+                }
+                else
+                {
+                    sb.Append("if(s){s.style.display='none';}");
+                }
+
+                string lineClass = step.Status == AgentStepStatus.Completed ? "done"
+                    : step.Status == AgentStepStatus.InProgress ? "active"
+                    : "";
+                sb.Append($"var l=document.getElementById('agent-line-{pid}-{step.Index}');");
+                sb.Append($"if(l){{l.className='agent-step-line {lineClass}';}}");
+            }
+
+            // 更新进度条
+            int failed = plan.Steps.Count(s => s.Status == AgentStepStatus.Failed);
+            int progressPercent = total > 0 ? (completed + failed) * 100 / total : 0;
+            sb.Append($"var pf=document.getElementById('agent-progress-fill-{pid}');");
+            sb.Append($"if(pf){{pf.style.width='{progressPercent}%';}}");
+
+            // 更新头部计数器
+            sb.Append($"var hc=document.getElementById('agent-header-counter-{pid}');");
+            sb.Append($"if(hc){{hc.textContent='{completed}/{total} 步';}}");
+
+            // 更新底部计数器
+            sb.Append($"var pc=document.getElementById('agent-step-counter-{pid}');");
+            string counterText = failed > 0
+                ? $"{completed}/{total} 步完成，{failed} 步失败"
+                : $"{completed}/{total} 步完成";
+            sb.Append($"if(pc){{pc.textContent='{EscapeJsString(counterText)}';}}");
+
+            sb.Append("})();");
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// 构建任务完成后更新面板为完成状态的 JS（显示完成标记和关闭按钮高亮）。
+        /// </summary>
+        public static string BuildAgentTaskPanelCompleteJs(AgentTaskPlan plan)
+        {
+            string pid = EscapeJsString(plan.PlanId);
+            int completed = plan.Steps.Count(s => s.Status == AgentStepStatus.Completed);
+            int failed = plan.Steps.Count(s => s.Status == AgentStepStatus.Failed);
+            int total = plan.Steps.Count;
+            string statusIcon = plan.IsCancelled ? "⚠️" : (failed > 0 ? "⚠️" : "✅");
+            string statusColor = plan.IsCancelled ? "#E07878" : (failed > 0 ? "#C8A84E" : "#4EC9B0");
+            string statusText = plan.IsCancelled ? "已取消" : (failed > 0 ? $"{completed}/{total} 步成功，{failed} 步失败" : $"{completed}/{total} 步全部成功");
+            string escapedStatusIcon = EscapeJsString(statusIcon);
+            string escapedStatusText = EscapeJsString(statusText);
+            string escapedPid = EscapeJsString(pid);
+
+            return $@"
+(function(){{
+    var panel=document.getElementById('agent-task-panel-{escapedPid}');
+    if(!panel)return;
+
+    // 更新标题为完成状态
+    var title=panel.querySelector('.task-title');
+    if(title){{title.textContent={escapedStatusIcon}+' '+{escapedStatusText};title.style.color='{statusColor}';}}
+
+    // 更新进度
+    var prog=document.getElementById('agent-task-progress-{escapedPid}');
+    if(prog)prog.textContent='{completed}/{total} 步';
+
+    // 高亮关闭按钮
+    var closeBtn=document.getElementById('agent-task-close-{escapedPid}');
+    if(closeBtn){{closeBtn.style.background='#3C1A1A';closeBtn.style.color='#E07878';closeBtn.style.borderColor='#6A3A3A';closeBtn.title='关闭任务面板';}}
+
+    // 更新进度条
+    var pf=document.getElementById('agent-progress-fill-{escapedPid}');
+    if(pf)pf.style.width='100%';
+
+    // 滚动到底部
+    window.scrollTo({{top:document.body.scrollHeight,behavior:'smooth'}});
+}})();";
+        }
         /// <summary>
         /// 转义字符串用于嵌入 JS 字符串字面量。
         /// </summary>

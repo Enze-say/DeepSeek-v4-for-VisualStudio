@@ -24,12 +24,45 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
     public class EditAgent : BaseAgent
     {
         private CancellationTokenSource? _agentCts;
+        private ExploreAgent? _exploreAgent;
 
         /// <summary>
         /// ExploreAgent 引用，由 AgentDispatcher 注入。
         /// 用于在执行代码修改前智能发现相关文件。
+        /// 设置时自动转发 ExploreAgent 的日志和文件变更事件。
         /// </summary>
-        public ExploreAgent? ExploreAgent { get; set; }
+        public ExploreAgent? ExploreAgent
+        {
+            get => _exploreAgent;
+            set
+            {
+                if (_exploreAgent != null)
+                {
+                    _exploreAgent.LogEntryAdded -= OnExploreLog;
+                    _exploreAgent.FileChangeNotified -= OnExploreFileChange;
+                }
+                _exploreAgent = value;
+                if (_exploreAgent != null)
+                {
+                    _exploreAgent.LogEntryAdded += OnExploreLog;
+                    _exploreAgent.FileChangeNotified += OnExploreFileChange;
+                }
+            }
+        }
+
+        private void OnExploreLog(AgentLogEntry entry)
+        {
+            // 转发 ExploreAgent 日志到 EditAgent 订阅者，避免重复写日志文件
+            var forwarded = new AgentLogEntry { Level = entry.Level, Message = $"[Explore] {entry.Message}" };
+            _logs.Add(forwarded);
+            RaiseLogEntryAdded(forwarded);
+        }
+
+        private void OnExploreFileChange(AgentFileChangeEventArgs args)
+        {
+            // 转发 ExploreAgent 的文件变更通知
+            NotifyFileChange(args.PlanId, args.ChangeType, args.FilePath, args.Detail);
+        }
 
         /// <summary>当前正在执行的任务计划</summary>
         public AgentTaskPlan? CurrentPlan { get; set; }
@@ -47,6 +80,7 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
         public static readonly string[] EditTools = new[]
         {
             "create_file",
+            "delete_file",
             "replace_string_in_file",
             "multi_replace_string_in_file",
             "read_file",
@@ -85,12 +119,18 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
                 "- 你有权修改项目文件，但要谨慎、精确\n" +
                 "- 每次修改后验证代码正确性（检查编译错误）\n" +
                 "- 遵循项目中已有的编码规范和架构模式\n" +
-                "- 优先使用项目已引入的框架和库\n\n" +
+                "- 优先使用项目已引入的框架和库\n" +
+                "- 删除文件前会要求用户确认，请只在必要时删除\n\n" +
                 "## 代码输出格式\n" +
                 "修改文件时使用以下格式：\n" +
                 "```file:完整/绝对/路径\n" +
                 "// 修改后的完整文件内容\n" +
                 "```\n\n" +
+                "## 删除文件格式\n" +
+                "需要删除文件时使用以下格式：\n" +
+                "delete:完整/绝对/路径\n" +
+                "或\n" +
+                "delete_file:完整/绝对/路径\n\n" +
                 "## 步骤执行\n" +
                 "- 严格按照计划步骤顺序执行\n" +
                 "- 每步完成报告进度\n" +
@@ -190,10 +230,46 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
                     }
 
                     NotifyPlanUpdated();
+
+                    // ── Planning 模式下继承上下文：将刚完成的步骤结果累积 ──
+                    if (context.IsPlanningMode && step.Status == AgentStepStatus.Completed)
+                    {
+                        string stepResult = string.IsNullOrEmpty(step.ResultSummary)
+                            ? $"步骤 {step.Index} ({step.Title}) 已完成"
+                            : $"步骤 {step.Index} ({step.Title}): {step.ResultSummary}";
+                        context.AccumulatedContext = (context.AccumulatedContext ?? "") + "\n" + stepResult;
+                        if (!string.IsNullOrEmpty(step.AiResponse) && step.AiResponse.Length < 3000)
+                            context.AccumulatedContext += "\n" + step.AiResponse;
+                        AddLog("INFO", $"上下文已累积 ({context.AccumulatedContext.Length} 字符)");
+                    }
                 }
 
                 plan.IsCompleted = plan.Steps.All(s =>
                     s.Status is AgentStepStatus.Completed or AgentStepStatus.Skipped);
+
+                // ── Planning 模式：所有步骤完成后统一编译验证一次 ──
+                if (context.IsPlanningMode && plan.ChangedFiles.Count > 0
+                    && !plan.IsCancelled && !_agentCts!.IsCancellationRequested)
+                {
+                    AddLog("INFO", "🔨 Planning 模式：所有步骤完成，执行最终编译验证...");
+                    NotifyPlanUpdated();
+                    try
+                    {
+                        string finalBuildResult = await ExecuteBuildStepAsync(
+                            new AgentStep { Title = "最终编译验证" }, context.SolutionPath,
+                            _agentCts.Token);
+                        string oneLine = finalBuildResult.Split(new[] { '\r', '\n' },
+                            StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? finalBuildResult;
+                        if (finalBuildResult.Contains("✅") || finalBuildResult.Contains("0 个错误"))
+                            AddLog("INFO", $"✅ 最终编译通过: {oneLine}");
+                        else
+                            AddLog("WARN", $"⚠️ 最终编译存在问题: {oneLine}");
+                    }
+                    catch (Exception ex)
+                    {
+                        AddLog("WARN", $"最终编译异常: {ex.Message}");
+                    }
+                }
             }
             finally
             {
@@ -380,6 +456,50 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
             step.AiResponse = result;
             changes = ParseCodeChangesFromResult(result);
 
+            // ── 解析并处理文件删除（在代码变更之前执行）──
+            var deletions = ParseFileDeletionsFromResult(result);
+            if (deletions.Count > 0 && !ct.IsCancellationRequested)
+            {
+                // 解析删除路径
+                var resolvedDeletions = deletions
+                    .Select(d => ResolveFilePath(d, context.SolutionPath))
+                    .Where(d => File.Exists(d))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                if (resolvedDeletions.Count > 0)
+                {
+                    AddLog("INFO", $"检测到 {resolvedDeletions.Count} 个待删除文件: [{string.Join(", ", resolvedDeletions.Select(Path.GetFileName))}]");
+
+                    // ── 请求用户确认删除 ──
+                    string deleteReason = step.Title ?? "代码重构";
+                    bool confirmed = await RequestFileDeleteConfirmationAsync(resolvedDeletions, deleteReason);
+
+                    if (confirmed)
+                    {
+                        await AgentDispatcher.DeleteFilesViaEnvDTEAsync(resolvedDeletions);
+                        AddLog("INFO", $"✅ 已删除 {resolvedDeletions.Count} 个文件");
+
+                        // 记录删除到文件变更列表 + 实时通知 WebView
+                        foreach (string deletedPath in resolvedDeletions)
+                        {
+                            plan.ChangedFiles.Add(new FileChangeSummary
+                            {
+                                FilePath = deletedPath,
+                                LinesAdded = 0,
+                                LinesRemoved = -1,
+                                BriefDescription = $"{Path.GetFileName(deletedPath)} (已删除)",
+                            });
+                            NotifyFileChange(plan.PlanId, "delete", deletedPath, "已删除");
+                        }
+                    }
+                    else
+                    {
+                        AddLog("WARN", "❌ 用户取消了文件删除");
+                    }
+                }
+            }
+
             // ── 保存原始文件内容（用于最终 diff 比较）──
             var originalContents = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
@@ -433,6 +553,11 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
                     {
                         AddLog("INFO", $"✅ 已写入: {resolvedPath} (+{change.LinesAdded} -{change.LinesRemoved})");
                         plan.ChangedFiles.Add(change);
+
+                        // ── 实时通知 WebView 文件变更 ──
+                        string changeType = isNewFile ? "create" : "modify";
+                        string detail = $"+{change.LinesAdded} -{change.LinesRemoved}";
+                        NotifyFileChange(plan.PlanId, changeType, resolvedPath, detail);
                     }
                     else
                     {
@@ -449,10 +574,14 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
                 ? $"修改 {changes.Count} 个文件 (+{changes.Sum(c => c.LinesAdded)} -{changes.Sum(c => c.LinesRemoved)})"
                 : "未检测到文件变更";
 
-            // ── 编译验证 + 多轮修复 ──
-            if (changes.Count > 0 && !ct.IsCancellationRequested)
+            // ── 编译验证 + 多轮修复（Planning 模式下跳过每步构建，最后统一构建）──
+            if (changes.Count > 0 && !ct.IsCancellationRequested && !context.IsPlanningMode)
             {
                 await BuildAndFixLoopAsync(step, plan, context, changes, ct);
+            }
+            else if (changes.Count > 0 && context.IsPlanningMode)
+            {
+                AddLog("INFO", "📋 Planning 模式：跳过每步编译验证，将在所有步骤完成后统一构建");
             }
 
             // ── 恢复 diff 预览，统一显示一次最终 diff ──
@@ -712,6 +841,16 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
             sb.AppendLine($"步骤详情: {step.Description}");
             sb.AppendLine();
 
+            // ── Planning 模式：注入之前步骤的累积上下文，避免重复搜索解决方案 ──
+            if (context.IsPlanningMode && !string.IsNullOrEmpty(context.AccumulatedContext))
+            {
+                sb.AppendLine("## 前面步骤的执行结果（请基于这些结果继续，不要重复搜索已发现的文件）");
+                sb.AppendLine(context.AccumulatedContext.Length > 6000
+                    ? context.AccumulatedContext.Substring(0, 6000) + "\n... (上下文已截断)"
+                    : context.AccumulatedContext);
+                sb.AppendLine();
+            }
+
             if (!string.IsNullOrEmpty(context.SolutionPath))
             {
                 sb.AppendLine($"解决方案路径: {context.SolutionPath}");
@@ -811,19 +950,31 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
 
             if (plan.ChangedFiles.Count > 0)
             {
+                // ── 按文件路径合并相同文件的多条变更记录 ──
+                var mergedFiles = plan.ChangedFiles
+                    .GroupBy(c => NormalizePath(c.FilePath), StringComparer.OrdinalIgnoreCase)
+                    .Select(g => new
+                    {
+                        DisplayPath = g.First().FilePath,
+                        LinesAdded = g.Sum(c => c.LinesAdded),
+                        LinesRemoved = g.Sum(c => c.LinesRemoved),
+                    })
+                    .ToList();
+
                 sb.AppendLine("### 📊 文件变更统计");
                 sb.AppendLine();
                 sb.AppendLine("| 文件 | 变更 |");
                 sb.AppendLine("|------|------|");
-                foreach (var change in plan.ChangedFiles)
+                foreach (var change in mergedFiles)
                 {
                     string delta = $"{(change.LinesAdded > 0 ? $"+{change.LinesAdded}" : "")}"
                         + $"{(change.LinesRemoved > 0 ? $" -{change.LinesRemoved}" : "")}";
-                    sb.AppendLine($"| `{change.FilePath}` | {delta} |");
+                    string fileName = Path.GetFileName(change.DisplayPath);
+                    sb.AppendLine($"| `{fileName}` | {delta} |");
                 }
                 sb.AppendLine();
-                sb.AppendLine($"总变更: +{plan.ChangedFiles.Sum(c => c.LinesAdded)}"
-                    + $" -{plan.ChangedFiles.Sum(c => c.LinesRemoved)} 行");
+                sb.AppendLine($"总变更: +{mergedFiles.Sum(c => c.LinesAdded)}"
+                    + $" -{mergedFiles.Sum(c => c.LinesRemoved)} 行");
             }
 
             return sb.ToString();
@@ -1344,6 +1495,15 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
                 return relative;
             }
             return fullPath;
+        }
+
+        /// <summary>
+        /// 规范化文件路径（统一分隔符、去除尾部空格），用于 GroupBy 合并。
+        /// </summary>
+        private static string NormalizePath(string filePath)
+        {
+            if (string.IsNullOrEmpty(filePath)) return filePath;
+            return filePath.Replace('/', '\\').Trim().TrimEnd('\\');
         }
 
         #endregion

@@ -1,8 +1,9 @@
-using DeepSeek_v4_for_VisualStudio.Models;
+﻿using DeepSeek_v4_for_VisualStudio.Models;
 using DeepSeek_v4_for_VisualStudio.Services;
 using DeepSeek_v4_for_VisualStudio.Utils;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -30,6 +31,9 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
 
         /// <summary>权限请求事件</summary>
         public event Action<AgentPermissionRequest>? PermissionRequested;
+
+        /// <summary>文件变更实时通知事件（编辑阶段逐文件推送）</summary>
+        public event Action<AgentFileChangeEventArgs>? FileChangeNotified;
 
         /// <summary>当前待确认的权限请求</summary>
         public AgentPermissionRequest? PendingPermission { get; protected set; }
@@ -199,6 +203,59 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
         }
 
         /// <summary>
+        /// 从 AI 返回结果中解析待删除的文件（delete: 格式）。
+        /// 支持格式:
+        ///   delete: path/to/file.cs
+        ///   delete_file: path/to/file.cs
+        ///   ```delete: path/to/file.cs```
+        /// </summary>
+        protected static List<string> ParseFileDeletionsFromResult(string aiResult)
+        {
+            var deletions = new List<string>();
+            if (string.IsNullOrWhiteSpace(aiResult)) return deletions;
+
+            // 严格匹配：仅匹配行首的 delete: 或 delete_file: 格式
+            // 要求路径包含文件扩展名（如 .cs/.cpp），排除代码块内的 delete 关键字误匹配
+            var regex = new System.Text.RegularExpressions.Regex(
+                @"(?<=^|\n)\s*(?:delete|delete_file)\s*:\s*(?<path>[^\r\n`]+?\.[a-zA-Z0-9]+)\b",
+                System.Text.RegularExpressions.RegexOptions.Multiline | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+            var matches = regex.Matches(aiResult);
+            foreach (System.Text.RegularExpressions.Match match in matches)
+            {
+                string filePath = match.Groups["path"].Value.Trim();
+                // 过滤：路径不能以 ``` 结尾（排除代码块标记）
+                if (string.IsNullOrWhiteSpace(filePath) || filePath.EndsWith("`"))
+                    continue;
+
+                // 过滤：路径不能在代码块内部
+                int matchPos = match.Index;
+                string textBefore = aiResult.Substring(0, Math.Min(matchPos, aiResult.Length));
+                int openFences = CountSubstring(textBefore, "```");
+                if (openFences % 2 != 0)
+                    continue;
+
+                deletions.Add(filePath);
+            }
+
+            return deletions;
+        }
+
+        /// <summary>
+        /// 统计子串出现次数。
+        /// </summary>
+        private static int CountSubstring(string text, string substring)
+        {
+            int count = 0, idx = 0;
+            while ((idx = text.IndexOf(substring, idx, StringComparison.Ordinal)) >= 0)
+            {
+                count++;
+                idx += substring.Length;
+            }
+            return count;
+        }
+
+        /// <summary>
         /// 计算文本行数。
         /// </summary>
         protected static int CountLines(string text)
@@ -293,6 +350,77 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
         {
             if (PendingPermission?.RequestId == requestId)
                 PendingPermission.ResponseTcs?.TrySetResult(approved);
+        }
+
+        /// <summary>
+        /// 请求用户确认文件删除操作。
+        /// 会中断当前执行流，在 WebView 中渲染确认按钮，等待用户响应。
+        /// </summary>
+        /// <param name="filePaths">待删除的文件绝对路径列表</param>
+        /// <param name="reason">删除原因说明</param>
+        /// <returns>true 表示用户确认删除，false 表示取消</returns>
+        public async Task<bool> RequestFileDeleteConfirmationAsync(List<string> filePaths, string reason = "")
+        {
+            if (filePaths == null || filePaths.Count == 0)
+                return false;
+
+            var fileNames = filePaths.Select(p => System.IO.Path.GetFileName(p)).ToList();
+            string title = filePaths.Count == 1
+                ? $"删除文件: {fileNames[0]}"
+                : $"删除 {filePaths.Count} 个文件";
+            string command = !string.IsNullOrEmpty(reason) ? reason : string.Join("\n", filePaths);
+
+            var request = new AgentPermissionRequest
+            {
+                Title = title,
+                Command = command,
+                ActionType = "file_delete",
+                FilePaths = new List<string>(filePaths),
+                ResponseTcs = new TaskCompletionSource<bool>(),
+            };
+
+            PendingPermission = request;
+            PermissionRequested?.Invoke(request);
+            AddLog("INFO", $"等待用户确认删除: {title}");
+
+            bool approved = await request.ResponseTcs.Task;
+            PendingPermission = null;
+            AddLog("INFO", $"文件删除确认结果: {(approved ? "✅ 确认删除" : "❌ 取消")} → {title}");
+            return approved;
+        }
+
+        /// <summary>
+        /// 通知文件变更（用于实时推送到 WebView）。
+        /// </summary>
+        /// <param name="planId">关联的计划 ID</param>
+        /// <param name="changeType">变更类型: modify, create, delete</param>
+        /// <param name="filePath">文件绝对路径</param>
+        /// <param name="detail">变更详情</param>
+        protected void NotifyFileChange(string planId, string changeType, string filePath, string detail)
+        {
+            try
+            {
+                FileChangeNotified?.Invoke(new AgentFileChangeEventArgs
+                {
+                    PlanId = planId,
+                    ChangeType = changeType,
+                    FilePath = filePath,
+                    Detail = detail,
+                });
+            }
+            catch { }
+        }
+
+        #endregion
+
+        #region Event Helpers for Derived Classes
+
+        /// <summary>
+        /// 供派生类触发 LogEntryAdded 事件（不写日志文件，仅转发到订阅者）。
+        /// </summary>
+        protected void RaiseLogEntryAdded(AgentLogEntry entry)
+        {
+            try { LogEntryAdded?.Invoke(entry); } catch { }
         }
 
         #endregion
