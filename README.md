@@ -4,9 +4,9 @@
 
 # DeepSeek v4 for Visual Studio
 
-**DeepSeek V4 · 深度思考 · MCP 协议 · Skills 技能系统 · 联网搜索 · OCR 图像识别 · 多智能体协作**
+**DeepSeek V4 · 深度思考 · 1M 上下文 · 多智能体协作 · Skills 技能系统 · MCP 协议 · 联网搜索 · OCR 图像识别**
 
-*将 DeepSeek V4 大模型深度集成到 Visual Studio 2022 的全能 AI 编程助手*
+*将 DeepSeek V4 大模型深度集成到 Visual Studio 2022+ 的全能 AI 编程助手*
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![VS](https://img.shields.io/badge/VS-2022%2017.14%2B-purple.svg)]()
@@ -24,143 +24,263 @@
 
 **DeepSeek v4 for Visual Studio** 把 DeepSeek V4 模型直接嵌入你的编辑器。选中代码、粘贴截图、拖入文件——AI 就在旁边，随时响应。
 
-它不只是聊天窗口，更是一套完整的 **AI 工作流系统**：多智能体协作引擎自动分派任务给最适合的 Agent，Skills 技能引擎让你定义可复用的 AI 工作流，MCP 协议让你接入任意工具生态，三大 OCR 引擎能读懂你的报错截图。
+它不只是聊天窗口，更是一套完整的 **AI 工作流系统**：
+
+- **多智能体协作引擎** — 四种专用 Agent 自动分派、移交任务
+- **Skills 技能引擎** — 用 Markdown 定义可复用的 AI 工作流
+- **MCP 协议** — 接入任意工具生态，Function Calling 自动调用
+- **1M Token 上下文** — 承载大型代码库，智能压缩不丢信息
+- **三种编辑方法** — Patch / Insert / Create，四级匹配精准应用
+- **RAG 检索增强** — 可插拔的知识库集成
+- **三大 OCR 引擎** — 读懂你的报错截图
 
 ---
 
 ## 能力一览
 
-```
-🧠 DeepSeek V4          流式对话 · 深度思考 (Reasoning) · 双模型可选
-🤖 多智能体系统          Ask / Explore / Plan / Edit 四种 Agent 自动协作
-🔧 MCP 协议             多服务器连接 · Function Calling · 自定义工具扩展
-📐 Skills 技能系统       斜杠命令 · 项目/用户/内置三级 · YAML 前置元数据
-🌐 联网搜索              百度千帆 + DuckDuckGo 双引擎 · 额度耗尽自动切换
-📄 文件解析              50+ 格式 · 代码/文档/PDF/Office 全支持
-🔍 图像 OCR              Windows 内置 · PaddleOCR · MCP OCR 三引擎
-📊 代码差异预览          编辑器内红绿标记 · 确认/撤销 · 一键应用
-💡 代码补全              Ghost Text 行内预测 · 上下文感知 · 可配置延迟
-💬 聊天窗口              WebView2 渲染 · Markdown 高亮 · 多会话持久化
-⚙️ 可视化配置            Tools → Options 一站式设置
-```
+| 能力 | 说明 |
+|------|------|
+| 🧠 **DeepSeek V4** | 流式对话 · 深度思考 (Reasoning) · 双模型可选 (Pro / Flash) |
+| 🤖 **多智能体系统** | Ask / Explore / Plan / Edit 四种 Agent，Handoff 自动协作 |
+| 🔧 **MCP 协议** | 多服务器连接 · Function Calling · 工具白名单 · 持久化配置 |
+| 📐 **Skills 技能** | 斜杠命令 · 项目/用户/内置三级 · YAML 前置元数据 |
+| 📝 **三种编辑方法** | apply_patch / insert_edit_into_file / create_file，四级匹配 + Healing 修复 |
+| 📚 **1M 上下文** | 900K Token 预算 · 上下文压缩 · 文件不再截断 |
+| 🔍 **RAG 检索** | 可插拔提供者接口 · 智能缓存 · 自动注入对话上下文 |
+| 🌐 **联网搜索** | 百度千帆 (月1500次免费) + DuckDuckGo 双引擎 · 额度耗尽自动切换 |
+| 📄 **文件解析** | 50+ 格式 · 代码/文档/PDF/Word/Excel 全支持 · 拖拽即解析 |
+| 🖼️ **图像 OCR** | Windows 内置 · PaddleOCR ≥95% · MCP OCR 三引擎 |
+| 📊 **代码差异预览** | 编辑器内红绿 Diff 标记 · 确认/撤销/一键应用 |
+| 💡 **Ghost Text 补全** | 行内灰色预测 · 上下文感知 · 可配置防抖延迟 |
+| 💬 **聊天窗口** | WebView2 渲染 · Markdown/代码高亮 · 多会话持久化 · 计划实时展示 |
+| ⚙️ **可视化配置** | Tools → Options 一站式设置 · 上下文/搜索/OCR 分类管理 |
 
 ---
 
-## 多智能体系统
+## 多智能体协作系统
 
-本扩展内置四种专用 Agent，自动协作处理复杂任务：
+本扩展内置四种专用 Agent，通过 **Handoff（移交）** 机制自动协作，无需手动切换：
 
-| Agent | 角色 | 能力 |
-|-------|------|------|
-| **Ask** 🤔 | 问答助手 | 纯问答、代码解释、只读分析 |
-| **Explore** 🔍 | 探索者 | 代码库搜索、文件发现、结构分析 |
-| **Plan** 📋 | 规划者 | 任务规划、方案设计、禁止修改代码 |
-| **Edit** ✏️ | 执行者 | 代码修改、文件操作、协调 Explore 发现文件 |
+| Agent | 角色 | 能力 | 可移交至 |
+|-------|------|------|----------|
+| **Ask** 🤔 | 问答助手 | 代码解释、只读分析、知识问答 | Explore |
+| **Explore** 🔍 | 探索者 | 代码库搜索、文件发现、结构分析、引用追踪 | Ask, Plan, Edit |
+| **Plan** 📋 | 规划者 | 任务分解、方案设计、生成 plan.md | Edit, Explore |
+| **Edit** ✏️ | 执行者 | 代码写入/删除、文件操作、编辑后诊断 | Explore, Ask |
 
-Agent 之间支持 **Handoff（移交）** 机制——例如 Plan 制定方案后自动移交给 Edit 执行，Edit 需要查找文件时调度 Explore 协助。
+### 典型协作流程
+
+```
+用户提问 → Ask (分析问题)
+              ↓ 需要规划
+           Plan (制定方案 → 生成 plan.md)
+              ↓ Handoff
+           Edit (执行修改 → 通知 Explore 探查文件)
+              ↓ 完成后
+           Ask (总结汇报)
+```
+
+每个 Agent 有独立的系统提示词、工具白名单和权限边界，确保安全可控。
 
 ---
 
 ## Skills 技能系统
 
-> 这是本扩展区别于普通 AI 插件的核心特性。
+> 🔥 这是本扩展区别于普通 AI 插件的核心特性。
 
 ### 什么是 Skill？
 
-Skill 就是一个 Markdown 文件 (`SKILL.md`)，用 YAML 前置元数据描述"何时触发、怎么做"：
+Skill 是一个 Markdown 文件 (`SKILL.md`)，用 YAML 前置元数据描述 **"何时触发、怎么做"**，AI 加载后即获得对应领域的专业工作指令。
 
 ```markdown
 ---
 name: code-review
 description: '审查代码质量、安全性、性能。Use when: code review, PR review, 代码审查'
-argument-hint: '[file path or code]'
+argument-hint: '[文件路径或代码片段]'
 user-invocable: true
 ---
 
 # 代码审查
 
-## 流程
+## 审查流程
 1. 从正确性、安全性、性能、可维护性、最佳实践五个维度分析
-2. 🔴 严重 → 🟡 中等 → 🟢 建议  按优先级列出问题
+2. 🔴 严重 → 🟡 中等 → 🟢 建议，按优先级列出问题
 3. 为每个问题提供修复方案和代码示例
 ```
 
 ### 三级技能来源
 
-| 级别 | 路径 | 说明 |
-|------|------|------|
+| 级别 | 路径 | 适用场景 |
+|------|------|----------|
 | 📁 **项目级** | `.github/skills/` `.agents/skills/` `.claude/skills/` | 随项目版本管理，团队共享 |
 | 👤 **用户级** | `~/.copilot/skills/` `~/.agents/skills/` | 个人偏好，跨项目通用 |
 | 🏭 **内置级** | `BuiltInSkills/`（随扩展发布） | 开箱即用，如 `code-review` |
 
 ### 使用方式
 
-在聊天窗口输入 `/` 即可触发斜杠命令自动补全，选择技能后 AI 会加载对应的工作流指令。
+在聊天窗口输入 `/` 触发斜杠命令自动补全，选择技能后 AI 加载对应工作流：
 
 ```text
 /code-review  UserService.cs
+/tdd          实现用户登录功能
+/triage       #42 这个 Bug 应如何处理
 ```
 
 ---
 
 ## MCP 协议集成
 
-通过 **Model Context Protocol (MCP)** 协议连接外部工具服务器，扩展 AI 能力边界：
+通过 **Model Context Protocol (MCP)** 连接外部工具服务器，无限扩展 AI 能力：
 
-- **多服务器支持**：同时连接多个 MCP Server，按需调用工具
-- **Function Calling**：AI 自动判断何时调用外部工具
-- **工具白名单**：每个 Agent 可声明允许使用的工具列表
-- **持久化配置**：MCP 服务器配置存储在 `%LocalAppData%\DeepSeekVS\mcp_servers.json`
-- **内置 OCR Server**：默认集成 PP-OCRv5（通过 `uvx paddleocr-mcp`）
+- **多服务器同时连接**：每台服务器独立进程，互不干扰
+- **自动 Function Calling**：AI 判断时机，自动调用 MCP 工具
+- **工具白名单**：每个 Agent 可声明允许使用的工具，精细化权限控制
+- **持久化配置**：`%LocalAppData%\DeepSeekVS\mcp_servers.json` 保存服务器列表
+- **内置 OCR Server**：默认集成 PP-OCRv5（`uvx paddleocr-mcp`）
+- **内部工具过滤**：OCR 等内部工具自动从 AI 可见列表中隐藏，避免误调用
 
-配置入口：聊天窗口 → 点击 🔌 MCP 按钮 → 添加/管理服务器。
+配置入口：聊天窗口 → 🔌 MCP 按钮 → 添加/管理服务器。
+
+---
+
+## 1M 上下文与压缩
+
+充分利用 DeepSeek V4 的 1M Token 上下文窗口：
+
+### Token 预算管理
+
+| 参数 | 值 | 说明 |
+|------|-----|------|
+| Token 上限 | 900K | 保留 100K 给输出 |
+| 文件大小限制 | 无上限 | 不再截断文件内容 |
+| 自动压缩阈值 | 85% | 达到上限时触发压缩 |
+
+### 上下文压缩
+
+当使用率超过 85% 时，自动压缩早期对话轮次：
+
+- **保留最近 3 轮**完整对话
+- **更早轮次**压缩为精简摘要，以 system 消息注入
+- 支持 **LLM 摘要**和**规则提取**双模式
+- 压缩摘要可被**再次压缩**（渐进式）
+- 实时 `ContextStats` 可查询各维度 Token 分布
+
+可在 `工具 → 选项 → DeepSeek Chat → Context Management` 中配置压缩参数。
+
+---
+
+## RAG 检索增强
+
+可插拔的 RAG (Retrieval-Augmented Generation) 集成，为 AI 提供项目知识库支持：
+
+- **提供者接口 (`IRagProvider`)**：注册任意 RAG 后端
+- **智能缓存**：Jaccard 相似度 ≥60% 的连续查询复用结果
+- **自动注入**：检索结果在每轮对话前注入上下文
+- **多提供者支持**：按名称切换活跃提供者
+
+```csharp
+// 注册自定义 RAG 提供者
+var ragService = new RagService();
+ragService.RegisterProvider(new MyCustomRagProvider());
+ragService.SetActiveProvider("MyProvider");
+ragService.IsEnabled = true;
+```
 
 ---
 
 ## 联网搜索
 
-| 搜索引擎 | 特点 |
-|----------|------|
-| **百度千帆** | 每月 1500 次免费请求，额度耗尽自动切换 |
-| **DuckDuckGo** | 完全免费，无额度限制 |
+| 搜索引擎 | 特点 | 额度 |
+|----------|------|------|
+| **百度千帆** | 中文搜索结果优质 | 每月 1500 次免费，超额自动切换 |
+| **DuckDuckGo** | 完全免费，隐私保护 | 国内不可用 |
 
-搜索关键词基于对话上下文智能生成，结果自动注入聊天上下文。
+- 基于对话上下文**智能生成**搜索关键词
+- 搜索结果**自动注入**聊天上下文
+- 百度额度耗尽时**无缝切换**到 DuckDuckGo
+
+---
+
+## 文件解析
+
+支持拖拽或粘贴 **50+ 种文件格式**，自动提取文本内容：
+
+| 类别 | 格式 |
+|------|------|
+| 代码 | `.cs` `.py` `.java` `.js` `.ts` `.go` `.rs` `.cpp` `.c` `.h` `.swift` `.kt` `.rb` `.php` `.sql` `.html` `.css` `.xml` `.json` `.yaml` `.toml` `.proto` 等 |
+| 文档 | `.txt` `.md` `.rst` `.log` `.csv` |
+| Office | `.doc` `.docx` `.xls` `.xlsx` |
+| PDF | `.pdf`（UglyToad.PdfPig 解析） |
+| 图片 | `.png` `.jpg` `.jpeg` `.bmp` `.gif` `.tiff` `.webp` → 自动 OCR |
+
+**操作方式**：直接从文件管理器拖拽文件到聊天窗口，或 `Ctrl+V` 粘贴。
 
 ---
 
 ## 图像 OCR
 
-三种引擎满足不同场景：
+三种 OCR 引擎满足不同场景：
 
-| 引擎 | 精度 | 配置 |
-|------|------|------|
-| **Windows 内置** | 一般 | 零配置，开箱即用 |
-| **PaddleOCR-Sharp** | ≥95% 中文识别率 | 自动下载 ChineseV5 模型 |
-| **MCP OCR** | 取决于服务端 | 需配置 MCP OCR 服务器 |
+| 引擎 | 中文识别率 | 配置难度 | 适用场景 |
+|------|-----------|----------|----------|
+| **Windows 内置** | 一般 | 零配置 | 英文截图、快速查看 |
+| **PaddleOCR-Sharp** | ≥95% | 自动下载模型 | 中文报错截图（推荐） |
+| **MCP OCR** | 取决于服务端 | 需配置服务器 | 有自定义 OCR 服务时 |
 
-直接 `Ctrl+V` 粘贴报错截图，AI 自动识别文字并分析问题。
+> 💡 直接 `Ctrl+V` 粘贴报错截图，AI 自动识别文字并分析问题，无需手动输入错误信息。
+
+---
+
+## 代码差异预览
+
+AI 修改代码后，在编辑器中以 **红色（删除）/ 绿色（新增）** 标记差异：
+
+- **实时预览**：修改前预览所有变更
+- **逐条确认**：Accept / Undo 每个 Diff 块
+- **一键全部应用**：确认无误后一次性接受所有修改
+- **编辑后诊断**：自动检查新引入的编译错误
+
+通过 `DeepSeekOptionsPage` 可开关此功能。
+
+---
+
+## Ghost Text 代码补全
+
+编辑器内的灰色幽灵文本预测，类似 GitHub Copilot：
+
+- **上下文感知**：利用当前文件内容和光标位置
+- **防抖延迟**：可配置触发间隔，避免频繁请求
+- **缓存机制**：LRU 缓存 10 个最近补全结果
+- **非侵入式**：灰色文本，Tab 接受，Esc 取消
+
+在 `工具 → 选项 → DeepSeek Chat` 中启用和配置。
 
 ---
 
 ## 安装
 
-### 推荐：下载 VSIX 安装
+### 推荐：下载 VSIX 安装包
 
 1. [**Releases**](https://github.com/zmy15/DeepSeek-v4-for-VisualStudio/releases) → 下载 `DeepSeek_v4_for_VisualStudio.vsix`
-2. 关闭 Visual Studio → 双击 `.vsix` → 安装
-3. 重启 Visual Studio
+2. 关闭所有 Visual Studio 实例
+3. 双击 `.vsix` 文件 → 按提示安装
+4. 重启 Visual Studio
 
-### 进阶：源码编译
+### 进阶：从源码编译
 
 ```powershell
 git clone https://github.com/zmy15/DeepSeek-v4-for-VisualStudio.git
-# 用 VS 2022 打开 .slnx → Ctrl+Shift+B 编译 → F5 调试
+# 用 VS 2022 打开 .slnx → Ctrl+Shift+B 编译 → F5 启动实验实例
 ```
 
-**编译要求**：
-- Visual Studio 2022 17.14+
-- .NET Framework 4.7.2 SDK
-- Visual Studio SDK（通过 VS Installer 安装）
+**编译环境要求**：
+
+| 组件 | 版本 |
+|------|------|
+| Visual Studio | 2022 (17.14+) |
+| .NET Framework SDK | 4.7.2 |
+| Visual Studio SDK | 通过 VS Installer → 修改 → 勾选 "Visual Studio 扩展开发" |
+| Windows | 10/11 x64 |
 
 ---
 
@@ -168,238 +288,153 @@ git clone https://github.com/zmy15/DeepSeek-v4-for-VisualStudio.git
 
 ### ① 获取 API Key
 
-[platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys) → 创建 Key → 复制
+访问 [platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys) → 创建 API Key → 复制。
 
-### ② 配置
+### ② 配置扩展
 
-`工具` → `选项` → `DeepSeek Chat` → 粘贴 Key → 选模型
+`工具` → `选项` → `DeepSeek Chat` → 粘贴 API Key → 选择模型。
 
 | 设置项 | 推荐值 | 说明 |
 |--------|--------|------|
 | API Key | 你的密钥 | 从 platform.deepseek.com 获取 |
-| Selected Model | `deepseek-v4-pro` | 主模型 |
-| Enable Deep Thinking | ✅ 开启 | 启用推理链 |
+| Selected Model | `deepseek-v4-pro` | Pro 模型推理能力更强 |
+| Enable Deep Thinking | ✅ 开启 | 让模型展示推理过程 |
 | Reasoning Effort | `high` | 推理深度（high / max） |
-| Search Provider | `DuckDuckGo` | 免费无需 Key，国内无法使用 |
+| Search Provider | `百度千帆` | 国内推荐，月1500次免费 |
 | OCR Engine | `PaddleOCR-Sharp` | 中文识别最佳 |
-| Show Diff Markers | ✅ 开启 | 代码修改预览 |
+| Show Diff Markers | ✅ 开启 | 修改前预览差异 |
 | Copilot Enable | ✅ 开启 | 行内代码补全 |
+| Token Budget | `900000` | 1M 上下文上限 |
+| Auto Compression | ✅ 开启 | Token 超限时自动压缩 |
 
-### ③ 开始对话
+### ③ 打开聊天窗口
 
-`视图` → `其他窗口` → `DeepSeek Chat`，或者点击工具栏 🧠 图标。
+`视图` → `其他窗口` → `DeepSeek Chat`，或点击工具栏图标。
 
-### ④ 常用操作
+### ④ 常用操作速查
 
 | 操作 | 方式 |
 |------|------|
-| 问代码问题 | 直接输入，AI 可读取当前打开的文件 |
-| 解析文件内容 | 拖拽文件到聊天窗口 |
-| 截图识别报错 | `Ctrl+V` 粘贴截图，自动 OCR |
-| 联网查最新资料 | 勾选 🌐 联网搜索 |
-| 调用 Skill | 输入 `/` 选择技能命令 |
-| 配置 MCP 服务器 | 点击 🔌 MCP 按钮 |
-| 预览代码修改 | 开启 Diff Markers，确认后应用 |
-| 自动补全建议 | 启用心跳模式，输入时自动提示 |
+| 代码问答 | 直接输入问题，AI 自动读取当前打开的文件 |
+| 文件内容解析 | 从文件管理器拖拽文件到聊天窗口 |
+| 截图识别报错 | `Ctrl+V` 粘贴截图，自动 OCR 识别 |
+| 联网查资料 | 勾选聊天窗口的 🌐 联网搜索 |
+| 调用技能 | 输入 `/` 选择斜杠命令 |
+| 管理 MCP 服务器 | 聊天窗口 → 点击 🔌 MCP 按钮 |
+| 切换 Agent | 聊天窗口顶部的 Agent 选择器 |
+| 多会话管理 | 左侧会话列表 → 新建/切换/删除 |
 
 ---
 
-## 配置项详解
+## 架构概览
 
-### API 设置
-- **API Key**：DeepSeek 平台 API 密钥
-- **System Prompt**：自定义系统提示词（可选，留空使用默认）
+```
+┌─────────────────────────────────────────────────────────┐
+│                   Visual Studio 2022                     │
+│  ┌─────────────┐  ┌──────────────┐  ┌───────────────┐  │
+│  │  Chat Window │  │  Diff Viewer  │  │  Ghost Text   │  │
+│  │  (WebView2)  │  │  (Adornment)  │  │  (Tagger)     │  │
+│  └──────┬───────┘  └──────┬───────┘  └───────┬───────┘  │
+│         │                 │                   │          │
+│  ┌──────┴─────────────────┴───────────────────┴───────┐  │
+│  │                 AgentDispatcher                    │  │
+│  │         (中央路由 · Handoff 管理)                    │  │
+│  └──────┬──────┬──────┬──────┬────────────────────────┘  │
+│         │      │      │      │                           │
+│    ┌────┴─┐ ┌─┴───┐ ┌┴───┐ ┌┴────┐                      │
+│    │ Ask  │ │Expl.│ │Plan│ │Edit │                      │
+│    └──────┘ └─────┘ └────┘ └─────┘                      │
+│                                                          │
+│  ┌───────────────────────────────────────────────────┐  │
+│  │                  服务层                             │  │
+│  │  DeepSeekApi │ SkillService │ McpManager │ OCR     │  │
+│  │  FileParser  │ EditPatch    │ WebSearch  │ RAG     │  │
+│  │  ContextMgr  │ Compressor   │ DiffMarker │ ChatPst │  │
+│  └───────────────────────────────────────────────────┘  │
+│                                                          │
+│  ┌───────────────────────────────────────────────────┐  │
+│  │                  外部服务                           │  │
+│  │  api.deepseek.com  │  MCP Servers  │  Search APIs  │  │
+│  └───────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────┘
+```
 
-### 模型设置
-- **Selected Model**：选择使用的 DeepSeek 模型
-- **Enable Deep Thinking**：启用深度思考（Reasoning）模式
-- **Reasoning Effort**：推理深度，`high` 平衡速度与质量，`max` 最强推理
+### 核心服务
 
-### 联网搜索
-- **Enable Web Search**：开关联网搜索
-- **Search Provider**：百度千帆 / DuckDuckGo
-- **Baidu API Key**：百度千帆密钥（可选，每日1500次免费额度）
-
-### 编辑器
-- **Show Diff Markers in Editor**：是否在编辑器中显示代码修改标记
-
-### OCR
-- **OCR Engine**：选择 OCR 引擎（Windows 内置 / PaddleOCR-Sharp / MCP）
-
-### 代码补全
-- **Enable Copilot**：开关行内代码补全
-- **Suggestion Interval**：输入停顿多久后触发补全建议
+| 服务 | 职责 |
+|------|------|
+| `AgentDispatcher` | 多 Agent 中央路由，Handoff 协调，工作流编排 |
+| `DeepSeekApiService` | DeepSeek API 调用，流式响应，Thinking/Reasoning 控制 |
+| `SkillService` | Skill 发现、加载、YAML 解析、斜杠命令补全 |
+| `McpManagerService` | MCP 服务器生命周期管理，工具聚合与调用 |
+| `EditPatchService` | 三种编辑方法解析、四级匹配、Healing 修复、诊断检查 |
+| `ContextCompressorService` | 上下文压缩，LLM/规则双模式摘要 |
+| `RagService` | RAG 提供者注册、激活、检索结果注入 |
+| `ConversationContextManager` | 对话上下文构建，Token 预算管理，消息修剪 |
+| `WebSearchService` | 双引擎搜索，自动切换，关键词智能生成 |
+| `OcrService` | 三引擎 OCR 统一接口 |
+| `FileParserService` | 50+ 格式文件文本提取 |
+| `ChatHtmlService` | WebView2 HTML/CSS/JS 生成，Markdown 渲染 |
+| `CodeDiffService` | 代码差异计算与编辑器标记 |
+| `ChatPersistenceService` | 多会话持久化存储 |
 
 ---
 
-## 项目结构
+## 开发指南
+
+### 项目结构
 
 ```
 DeepSeek_v4_for_VisualStudio/
-├── DeepSeek_v4_for_VisualStudioPackage.cs    VS 扩展入口 (AsyncPackage)
-├── source.extension.vsixmanifest             VSIX 清单
-├── VSCommandTable.vsct                       菜单/工具栏命令表
-│
-├── Commands/
-│   └── ShowChatWindowCommand.cs              窗口命令
-│
-├── Models/
-│   ├── DeepSeekModels.cs                     API 请求/响应 · 流式 · Function Calling
-│   ├── AgentModels.cs                        智能体数据模型
-│   ├── AgentTypes.cs                         智能体类型枚举
-│   ├── McpTypes.cs                           MCP JSON-RPC 2.0 协议类型
-│   ├── SkillDefinition.cs                    Skill 定义 · 来源枚举 · 发现结果
-│   ├── SkillSuggestionItem.cs                斜杠命令自动补全项
-│   ├── ConversationTree.cs                   对话树数据结构
-│   ├── ContextModels.cs                      上下文模型
-│   ├── RagModels.cs                          RAG 检索增强模型
-│   └── ToolCallAccumulator.cs                工具调用累加器
-│
-├── Services/
-│   ├── DeepSeekApiService.cs                 API 通信（流式 + 思考模式）
-│   ├── AgentDispatcher.cs                    ★ 多智能体调度中心
-│   ├── SkillService.cs                       ★ Skills 发现/解析/缓存/事件
-│   ├── McpManagerService.cs                  MCP 多服务器管理 & 工具聚合
-│   ├── McpStdioClient.cs                     stdio 传输客户端
-│   ├── McpConfigStore.cs                     MCP 配置 JSON 持久化
-│   ├── WebSearchService.cs                   百度千帆 + DuckDuckGo 搜索
-│   ├── FileParserService.cs                  50+ 文件格式解析
-│   ├── OcrService.cs                         Windows/PaddleOCR/MCP 三引擎
-│   ├── ChatHtmlService.cs                    WebView2 HTML 模板
-│   ├── ChatPersistenceService.cs             聊天记录本地持久化
-│   ├── ContextCompressorService.cs           上下文压缩（Token 预算管理）
-│   ├── ConversationContextManager.cs          对话上下文构建
-│   ├── CodeDiffService.cs                    代码差异计算
-│   ├── DiffViewerService.cs                  差异可视化 & 标记
-│   ├── EditorDiffMarkerService.cs            编辑器行内标记
-│   ├── RagService.cs                         RAG 检索增强
-│   └── AiPrompts.cs                          Prompt 集中管理
-│   │
-│   └── Agents/
-│       ├── AskAgent.cs                       Ask 智能体
-│       ├── ExploreAgent.cs                   Explore 智能体
-│       ├── PlanAgent.cs                      Plan 智能体
-│       └── EditAgent.cs                      Edit 智能体
-│
-├── Settings/
-│   ├── DeepSeekOptionsPage.cs                Tools→Options 配置页
-│   └── DownloadLinkEditor.cs                 UI 编辑器
-│
-├── CodeCompletion/
-│   ├── InlinePredictionManager.cs            行内预测管理器
-│   ├── GhostTextTagger.cs                    Ghost Text 标记器
-│   ├── GhostTextTaggerProvider.cs            Ghost Text 提供者
-│   └── CommandFilter.cs                      命令过滤器
-│
-├── View/
-│   ├── DeepSeekChatWindowPane.cs             VS ToolWindow 面板
-│   ├── DeepSeekChatControl.xaml/.cs          WPF 主控件
-│   ├── DeepSeekChatControl.Events.cs         事件处理（分部类）
-│   ├── DeepSeekChatControl.Messaging.cs      消息收发（分部类）
-│   ├── DeepSeekChatControl.Rendering.cs      界面渲染（分部类）
-│   ├── DeepSeekChatControl.Sessions.cs       会话管理（分部类）
-│   ├── DeepSeekChatControl.Clipboard.cs      剪贴板 OCR（分部类）
-│   ├── DeepSeekChatControl.Agent.cs          智能体交互（分部类）
-│   ├── DeepSeekChatControl.CodeActions.cs    代码操作（分部类）
-│   ├── DeepSeekChatControl.Search.cs         搜索功能（分部类）
-│   ├── DeepSeekChatControl.Skills.cs         技能系统（分部类）
-│   ├── DiffPreviewAdornment.cs               差异预览装饰器
-│   ├── DiffViewerWindow.xaml/.cs             差异查看器窗口
-│   └── McpConfigDialog.xaml/.cs              MCP 配置对话框
-│
-├── Utils/
-│   ├── Logger.cs                             日志工具
-│   └── StringExtensions.cs                   字符串扩展
-│
-└── Resources/                                图标/样式资源
+├── Models/                  # 数据模型
+│   ├── AgentModels.cs       # Agent 任务计划模型
+│   ├── AgentTypes.cs        # Agent 类型枚举与定义
+│   ├── ContextModels.cs     # 上下文统计与压缩模型
+│   ├── DeepSeekModels.cs    # DeepSeek API 请求/响应模型
+│   ├── EditPatchModels.cs   # 编辑补丁模型
+│   ├── McpTypes.cs          # MCP 协议类型
+│   ├── RagModels.cs         # RAG 检索模型
+│   ├── SkillDefinition.cs   # 技能定义模型
+│   └── TreeModels.cs        # 文件树模型
+├── Services/                # 业务服务
+│   ├── Agents/              # Agent 实现
+│   │   ├── BaseAgent.cs     # Agent 基类
+│   │   ├── AskAgent.cs      # 问答 Agent
+│   │   ├── ExploreAgent.cs  # 探索 Agent
+│   │   ├── PlanAgent.cs     # 规划 Agent
+│   │   └── EditAgent.cs     # 编辑 Agent
+│   ├── AgentDispatcher.cs   # Agent 调度器
+│   ├── ChatHtmlService.cs   # 聊天 HTML 渲染
+│   ├── CodeDiffService.cs   # 代码差异服务
+│   ├── ContextCompressorService.cs  # 上下文压缩
+│   ├── ConversationContextManager.cs # 对话上下文管理
+│   ├── DeepSeekApiService.cs # API 服务
+│   ├── EditPatchService.cs  # 编辑补丁服务
+│   ├── FileParserService.cs # 文件解析
+│   ├── McpManagerService.cs # MCP 管理
+│   ├── OcrService.cs        # OCR 服务
+│   ├── RagService.cs        # RAG 服务
+│   ├── SkillService.cs      # 技能服务
+│   └── WebSearchService.cs  # 搜索服务
+├── View/                    # UI 视图
+│   └── DeepSeekChatControl* # 聊天窗口控件 (WebView2)
+├── CodeCompletion/          # 代码补全
+│   ├── GhostTextTagger.cs   # 幽灵文本标记
+│   └── InlinePredictionManager.cs  # 内联预测管理
+├── Commands/                # VS 命令
+├── Settings/                # 选项页
+├── ToolWindows/             # 工具窗口
+└── Utils/                   # 工具类
 ```
-
----
-
-## 技术栈
-
-| 层 | 选型 |
-|---|------|
-| 运行时 | .NET Framework 4.7.2 · WPF |
-| VS SDK | Microsoft.VisualStudio.SDK 17.14 |
-| 聊天 UI | WebView2 (Chromium) |
-| Markdown | Markdig 1.1.3 |
-| 文档解析 | NPOI 2.8.0 · PdfPig 0.1.14 |
-| OCR | Windows.Media.Ocr · PaddleOCR 3.0.1 · OpenCvSharp 4.10 |
-| 序列化 | System.Text.Json |
-| MCP | JSON-RPC 2.0 over stdio |
-
----
-
-## 开发
-
-### 环境
-
-- Visual Studio 2022 v17.14+
-- .NET Framework 4.7.2 SDK
-- **Visual Studio Extension Development** 工作负载
 
 ### 调试
 
-`F5` → 启动实验性 VS 实例 → 扩展自动加载
+1. 在 VS 2022 中打开 `.slnx`
+2. 设置为 Debug 配置
+3. `F5` 启动实验实例 (Experimental Instance)
+4. 在实验实例中打开/创建项目 → `视图 → 其他窗口 → DeepSeek Chat`
 
-### 打包
-
-```powershell
-msbuild DeepSeek_v4_for_VisualStudio.csproj /p:Configuration=Release
-# → bin/Release/net472/DeepSeek_v4_for_VisualStudio.vsix
-```
-
----
-
-## 常见问题
-
-<details>
-<summary><b>找不到聊天窗口？</b></summary>
-
-重启 VS → `视图` → `其他窗口` → `DeepSeek Chat`。检查 `扩展` → `管理扩展` 是否已启用。
-</details>
-
-<details>
-<summary><b>API Key 无效？</b></summary>
-
-从 [platform.deepseek.com/api_keys](https://platform.deepseek.com/api_keys) 重新获取，确认有余额。配置路径：`工具` → `选项` → `DeepSeek Chat`。
-</details>
-
-<details>
-<summary><b>OCR 中文不准？</b></summary>
-
-`工具` → `选项` → `DeepSeek Chat` → OCR Settings → 切换到 `PaddleOCR`。模型随 NuGet 包自动部署。
-</details>
-
-<details>
-<summary><b>怎么创建自定义 Skill？</b></summary>
-
-在项目的 `.github/skills/my-skill/SKILL.md` 创建文件，写入 YAML 前置元数据 + Markdown 指令。在聊天窗口输入 `/my-skill` 即可调用。详见上方 [Skills 技能系统](#skills-技能系统)。
-</details>
-
-<details>
-<summary><b>怎么接入 MCP 服务器？</b></summary>
-
-点击聊天窗口 🔌 按钮 → 添加服务器配置（名称、启动命令、参数）→ 保存后自动连接加载工具。
-</details>
-
-<details>
-<summary><b>WebView2 报错？</b></summary>
-
-扩展已内置 x64 Runtime。如仍有问题：[下载 Evergreen Runtime](https://developer.microsoft.com/microsoft-edge/webview2/)。
-</details>
-
----
-
-## 贡献
-
-1. Fork → 创建分支 → 修改 → Push → 提交 PR
-2. Commit 格式使用 [Conventional Commits](https://www.conventionalcommits.org/)：`feat:` / `fix:` / `docs:` / `refactor:` / `chore:`
-
----
-
-## 测试
+### 测试
 
 本扩展包含 **86 个 xUnit 测试**，覆盖模型序列化、补丁解析、上下文管理、API 流式响应等核心路径。
 
@@ -437,6 +472,45 @@ DeepSeek_v4_for_VisualStudio.Tests/
 ```
 
 ---
+## 常见问题
+
+<details>
+<summary><b>Q: 为什么聊天窗口显示空白？</b></summary>
+
+确保已安装 **WebView2 运行时**。VS 2022 通常自带，如缺失请从 [developer.microsoft.com/microsoft-edge/webview2](https://developer.microsoft.com/microsoft-edge/webview2) 下载。
+</details>
+
+<details>
+<summary><b>Q: API 调用失败，提示 401？</b></summary>
+
+检查 API Key 是否正确：`工具 → 选项 → DeepSeek Chat → API Key`。确保 Key 来自 [platform.deepseek.com](https://platform.deepseek.com)，且账户有余额。
+</details>
+
+<details>
+<summary><b>Q: OCR 识别中文不准？</b></summary>
+
+将 OCR 引擎切换到 `PaddleOCR-Sharp`（`工具 → 选项 → DeepSeek Chat → OCR Engine`），首次使用会自动下载 ChineseV5 模型。
+</details>
+
+<details>
+<summary><b>Q: 百度搜索无法使用？</b></summary>
+
+百度千帆需要配置 API Key（在选项页 Search 分类中）。如果没有百度 Key，可以切换到 DuckDuckGo（完全免费），但国内可能访问较慢。
+</details>
+
+<details>
+<summary><b>Q: 如何添加自定义 Skill？</b></summary>
+
+在项目根目录创建 `.github/skills/` 文件夹，放入 `SKILL.md` 文件（格式见 [Skills 技能系统](#skills-技能系统)）。重启聊天窗口即可发现。
+</details>
+
+<details>
+<summary><b>Q: 扩展与 GitHub Copilot 冲突吗？</b></summary>
+
+不冲突。本扩展的 Ghost Text 补全独立于 GitHub Copilot，可以与 Copilot 同时使用。如需关闭本扩展的补全，在选项页中取消勾选 "Copilot Enable"。
+</details>
+
+---
 
 ## 致谢
 
@@ -448,12 +522,12 @@ DeepSeek_v4_for_VisualStudio.Tests/
 
 ## 许可证
 
-[MIT](LICENSE) © [zmy15](https://github.com/zmy15)
+本项目基于 [MIT License](LICENSE) 开源。
 
 ---
 
 <div align="center">
 
-**Issues** · [github.com/zmy15/DeepSeek-v4-for-VisualStudio/issues](https://github.com/zmy15/DeepSeek-v4-for-VisualStudio/issues)
+**⭐ 如果这个项目对你有帮助，请给一个 Star！**
 
-</div>
+[![GitHub stars](https://img.shields.io/github/stars/zmy15/DeepSeek-v4-for-VisualStudio?style=social)](https://github.com/zmy15/DeepSeek-v4-for-VisualStudio)
