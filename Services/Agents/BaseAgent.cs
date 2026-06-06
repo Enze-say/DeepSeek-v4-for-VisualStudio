@@ -41,6 +41,19 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
         }
 
         /// <summary>
+        /// 所有 Agent 共享的不可变前缀。始终放在 messages[0]，确保跨 Agent 切换时
+        /// DeepSeek Prefix Cache 永远命中。Agent 专属行为指令不在此前缀中，
+        /// 而是作为最后一条 system 消息注入（位于历史之后、用户消息之前）。
+        /// 
+        /// 内容 = CommonSystemPromptPrefixCore（角色定义 + 文件规则 + 终端规则 +
+        /// Handoff 规则）+ 语言指令。
+        /// </summary>
+        protected static string GetSharedImmutablePrefix()
+        {
+            return CommonSystemPromptPrefixCore + LocalizationService.Instance["system.agent.languageInstruction"] + "\n";
+        }
+
+        /// <summary>
         /// 兼容旧代码：首次访问时返回当前语言的前缀。
         /// </summary>
         protected static string CommonSystemPromptPrefix => GetCommonSystemPromptPrefix();
@@ -256,17 +269,18 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
         /// <summary>
         /// 构建上下文感知的消息列表，将 Agent 的 system prompt 与对话历史合并。
         /// 
-        /// 消息顺序已针对 DeepSeek Prompt Cache 优化：
-        /// 1. Agent 的 System Prompt（稳定，每次相同）→ 形成可缓存前缀
-        /// 2. 对话历史摘要 / 压缩上下文（相对稳定）→ 延长可缓存前缀
-        /// 3. 当前用户消息（变化最大）→ 缓存前缀到此为止
+        /// ── 前缀缓存优化（v1.1.10）──
+        /// 消息顺序：
+        /// 1. 共享不可变前缀（messages[0]，永远不变 → DeepSeek Prefix Cache 永远命中）
+        /// 2. 压缩摘要（如果有）
+        /// 3. 对话历史（来自 ConversationContextManager）
+        /// 4. Agent 专属行为指令（systemPrompt，作为最后一条 system 消息注入）
+        /// 5. 当前用户消息
         /// 
-        /// 缓存命中策略：
-        /// - 同一 Agent 类型多次调用时，system prompt 前缀命中缓存
-        /// - 同一会话内多轮调用时，system + 历史前缀命中缓存
-        /// - 大幅降低重复上下文的 token 计费
+        /// 将 Agent 专属指令放在末尾而非 messages[1]，确保对话历史的字节位置
+        /// 不受 Agent 切换影响，Handoff 后对话历史全部命中缓存。
         /// </summary>
-        /// <param name="systemPrompt">Agent 的系统提示词</param>
+        /// <param name="systemPrompt">Agent 专属行为指令（不含共享前缀）</param>
         /// <param name="userPrompt">当前的用户消息/步骤描述</param>
         /// <param name="maxRecentTurns">注入对话历史的最近轮次数（0 = 不注入，默认不限制）</param>
         /// <returns>按缓存优化顺序排列的消息列表</returns>
@@ -275,8 +289,8 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
         {
             var messages = new List<ChatApiMessage>();
 
-            // ── 第1层：Agent System Prompt（最稳定，始终在最前面确保缓存命中）──
-            messages.Add(new ChatApiMessage { Role = "system", Content = systemPrompt });
+            // ── 第1层：共享不可变前缀（永远放在 messages[0]，跨 Agent 完全相同）──
+            messages.Add(new ChatApiMessage { Role = "system", Content = GetSharedImmutablePrefix() });
 
             // ── 第2层：对话历史（来自 ConversationContextManager，相对稳定）──
             // 使用 ContextManager 注入历史，而非 Context.ConversationHistory（后者不含 tool 消息和 reasoning 规则）
@@ -295,7 +309,7 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
                 var recentMessages = ctxManager.BuildApiMessagesRecentTurns(maxRecentTurns);
                 if (recentMessages.Count > 0)
                 {
-                    // 跳过第一条 system 消息（Agent 已有自己的 system prompt），
+                    // 跳过第一条 system 消息（共享前缀已覆盖），
                     // 但保留压缩摘要和搜索/RAG 上下文等 system 消息
                     bool firstSystemSkipped = false;
                     foreach (var msg in recentMessages)
@@ -313,7 +327,12 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
                 }
             }
 
-            // ── 第3层：当前用户消息（变化最大，放在最后）──
+            // ── 第3层：Agent 专属行为指令（放在历史之后、用户消息之前，作为最后一条 system 消息）──
+            //      此内容随 Agent 变化，但不影响 messages[0] 和对话历史的字节位置
+            if (!string.IsNullOrWhiteSpace(systemPrompt))
+                messages.Add(new ChatApiMessage { Role = "system", Content = systemPrompt });
+
+            // ── 第4层：当前用户消息（变化最大，放在最后）──
             messages.Add(new ChatApiMessage { Role = "user", Content = userPrompt });
 
             return messages;
@@ -322,9 +341,8 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
         /// <summary>
         /// 构建上下文感知的消息列表（支持注入额外的系统级上下文）。
         /// 
-        /// 用于 Plan Agent 等需要将动态发现结果注入 prompt 的场景。
-        /// extraSystemMessages 插入在历史消息之后、用户消息之前，
-        /// 确保 messages[0]（Agent System Prompt）始终稳定可缓存。
+        /// extraSystemMessages 插入在历史消息之后、Agent 专属指令之前，
+        /// Agent 专属指令之后是用户消息。确保 messages[0] 始终稳定可缓存。
         /// </summary>
         protected List<ChatApiMessage> BuildContextAwareMessages(
             string systemPrompt,
@@ -334,11 +352,12 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
         {
             var messages = BuildContextAwareMessages(systemPrompt, userPrompt, maxRecentTurns);
 
-            // ── 在用户消息之前注入额外的 system 消息 ──
-            // 用户消息始终在最后，所以插入位置是 Count - 1
+            // ── 在 Agent 专属指令之前注入额外的 system 消息 ──
+            // Agent 专属指令是 Count-2（倒数第二条），用户消息是 Count-1（最后一条）
+            int insertPos = messages.Count - 1; // 用户消息之前
             if (extraSystemMessages != null && extraSystemMessages.Count > 0)
             {
-                messages.InsertRange(messages.Count - 1, extraSystemMessages);
+                messages.InsertRange(insertPos, extraSystemMessages);
             }
 
             return messages;

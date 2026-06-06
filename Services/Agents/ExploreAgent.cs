@@ -158,7 +158,7 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
 
         private static string BuildSystemPrompt()
         {
-            return CommonSystemPromptPrefix + "\n" +
+            return
                 "你当前处于 **Explore 模式**——专精于任务聚焦的代码库分析，仅探索与用户任务直接相关的文件。\n\n" +
                 "## ⚠️ 核心规则（违反将导致错误结果）\n" +
                 "- **强制工具使用**：你必须使用工具（list_dir / file_search / grep_search / read_file）来探索代码库。\n" +
@@ -228,6 +228,7 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
                 // ── 构建消息列表 ──
                 var messages = new List<ChatApiMessage>
                 {
+                    new ChatApiMessage { Role = "system", Content = GetSharedImmutablePrefix() },
                     new ChatApiMessage { Role = "system", Content = Definition.SystemPrompt },
                     new ChatApiMessage { Role = "user", Content = BuildExplorePrompt(userMessage, context) }
                 };

@@ -89,7 +89,7 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
 
         private static string BuildSystemPrompt()
         {
-            return CommonSystemPromptPrefix + LocalizationService.Instance["agent.ask.systemPromptFragment"]
+            return LocalizationService.Instance["agent.ask.systemPromptFragment"]
                 + "\n\n## 代码库探索（runSubagent 工具）\n"
                 + "你 **没有** 直接读取或搜索代码库文件的工具。当需要了解项目代码时，必须使用 `runSubagent` 工具委派给 Explore 子代理：\n"
                 + "```json\n"

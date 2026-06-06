@@ -83,7 +83,7 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
 
         private static string BuildSystemPrompt()
         {
-            return CommonSystemPromptPrefix + LocalizationService.Instance["agent.plan.systemPromptFragment"];
+            return LocalizationService.Instance["agent.plan.systemPromptFragment"];
         }
 
         #endregion
@@ -234,6 +234,7 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
             var L = LocalizationService.Instance;
             var messages = new List<ChatApiMessage>
             {
+                new ChatApiMessage { Role = "system", Content = GetSharedImmutablePrefix() },
                 new ChatApiMessage { Role = "system", Content = Definition.SystemPrompt },
             };
 

@@ -137,7 +137,7 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
 
         private static string BuildSystemPrompt()
         {
-            return GetCommonSystemPromptPrefix() + LocalizationService.Instance["system.agent.editPromptFragment"];
+            return LocalizationService.Instance["system.agent.editPromptFragment"];
         }
 
         #endregion
