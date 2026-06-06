@@ -150,6 +150,9 @@ namespace DeepSeek_v4_for_VisualStudio.Models
         /// <summary>是否处于 Planning 模式（多步骤计划执行中）。为 true 时跳过每步编译，最后统一构建。</summary>
         public bool IsPlanningMode { get; set; }
 
+        /// <summary>是否由用户 @agent 显式路由。为 true 时 Agent 不应主动移交控制权（除非必要的链式移交如 Plan→Edit）。</summary>
+        public bool IsExplicitRoute { get; set; }
+
         /// <summary>Planning 模式下累积的上下文（前面步骤的结果和文件变更信息，供后续步骤继承）。</summary>
         public string? AccumulatedContext { get; set; }
 
@@ -307,6 +310,14 @@ namespace DeepSeek_v4_for_VisualStudio.Models
 
         /// <summary>传递给目标 Agent 的附加上下文（如已探索的文件列表）</summary>
         public string? AdditionalContext { get; set; }
+
+        /// <summary>是否被拦截（显式路由时拒绝非必要移交）</summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool Rejected { get; set; }
+
+        /// <summary>拦截原因（作为 tool 结果返回给 AI）</summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public string? RejectReason { get; set; }
     }
 
     /// <summary>
