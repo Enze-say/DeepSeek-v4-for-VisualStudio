@@ -1224,7 +1224,7 @@ namespace DeepSeek_v4_for_VisualStudio.View
                         }
                         else
                         {
-                            // ── AutoSend 模式：自动执行 Handoff 并渲染结果 ──
+                            // ── AutoSend 模式：自动执行 Handoff，结果合并到当前 Assist 气泡 ──
                             var handoffContext = new AgentContext
                             {
                                 SolutionPath = _solutionPath,
@@ -1235,61 +1235,53 @@ namespace DeepSeek_v4_for_VisualStudio.View
 
                             try
                             {
-                                // 创建新的助手消息气泡用于显示 Handoff 执行结果
-                                var handoffMsg = new ChatMessage
-                                {
-                                    Role = "assistant",
-                                    Content = $"🔄 {handoff.TargetAgent}: {LocalizationService.Instance["agent.status.analyzing"]}",
-                                    ReasoningContent = string.Empty,
-                                    Timestamp = DateTime.Now,
-                                    IsStreaming = true,
-                                    IsRendered = false,
-                                    AgentType = handoff.TargetAgent,
-                                };
-                                int handoffMsgIndex;
-                                lock (_lock)
-                                {
-                                    _messages.Add(handoffMsg);
-                                    handoffMsgIndex = _messages.Count - 1;
-                                }
-                                AddMessagesHtml("assistant", handoffMsg.Content);
-                                UpdateBrowser();
-
                                 // 执行 Handoff
                                 Logger.Info($"[MainFlow] 自动执行 Handoff → {handoff.TargetAgent}");
                                 var handoffResult = await _activeAgent.ExecuteHandoffAsync(
                                     handoff, handoffContext, _activePlan, _agentFactory);
 
-                                // 渲染结果
-                                string resultContent;
+                                // 构建 Handoff 结果内容，合并到当前 Assist 气泡后面
+                                string handoffContent;
                                 if (!string.IsNullOrWhiteSpace(handoffResult.Content))
                                 {
-                                    resultContent = handoffResult.Content;
+                                    handoffContent = "\n\n---\n\n" + handoffResult.Content;
                                 }
                                 else if (handoffResult.Success)
                                 {
-                                    resultContent = $"✅ {handoff.TargetAgent} 执行完成。";
+                                    handoffContent = $"\n\n---\n\n✅ {handoff.TargetAgent} 执行完成。";
                                 }
                                 else
                                 {
-                                    resultContent = $"❌ {handoff.TargetAgent} 执行失败: {handoffResult.ErrorMessage}";
+                                    handoffContent = $"\n\n---\n\n❌ {handoff.TargetAgent} 执行失败: {handoffResult.ErrorMessage}";
                                 }
+
+                                // 更新现有 Assist 消息内容
+                                string updatedContent = assistantMsg.Content + handoffContent;
+                                assistantMsg.Content = updatedContent;
+
+                                // ── 合并 Handoff 目标 Agent 的推理内容 ──
+                                string mergedReasoning = assistantMsg.ReasoningContent ?? string.Empty;
+                                if (!string.IsNullOrEmpty(handoffResult.ReasoningContent))
+                                {
+                                    mergedReasoning = string.IsNullOrEmpty(mergedReasoning)
+                                        ? handoffResult.ReasoningContent
+                                        : mergedReasoning + "\n\n" + handoffResult.ReasoningContent;
+                                }
+                                assistantMsg.ReasoningContent = mergedReasoning;
 
                                 lock (_lock)
                                 {
-                                    if (handoffMsgIndex >= 0 && handoffMsgIndex < _messages.Count)
+                                    if (assistantMsgIndex >= 0 && assistantMsgIndex < _messages.Count)
                                     {
-                                        var msg = _messages[handoffMsgIndex];
-                                        msg.Content = resultContent;
-                                        msg.IsStreaming = false;
-                                        msg.IsRendered = true;
+                                        _messages[assistantMsgIndex].Content = updatedContent;
+                                        _messages[assistantMsgIndex].ReasoningContent = mergedReasoning;
                                     }
                                 }
-                                BatchStreamingUpdate(handoffMsgIndex, resultContent, string.Empty, isComplete: true);
-                                PostStreamEnd(handoffMsgIndex, resultContent, string.Empty);
+                                BatchStreamingUpdate(assistantMsgIndex, updatedContent, mergedReasoning, isComplete: true);
+                                PostStreamEnd(assistantMsgIndex, updatedContent, mergedReasoning);
 
-                                _contextManager.AddAssistantMessage(resultContent);
-                                Logger.Info($"[MainFlow] Handoff 执行完成: → {handoff.TargetAgent}, 内容长度={resultContent.Length}");
+                                _contextManager.AddAssistantMessage(handoffContent);
+                                Logger.Info($"[MainFlow] Handoff 执行完成，已合并到 Assist 气泡: → {handoff.TargetAgent}, 内容长度={handoffContent.Length}");
                             }
                             catch (Exception ex)
                             {

@@ -380,6 +380,9 @@ namespace DeepSeek_v4_for_VisualStudio.View
                 // 仅在 AutoSend 为 true 时自动执行 Handoff；否则由用户通过 UI 按钮显式触发
                 if (agentResult.Handoff != null && agentResult.Handoff.AutoSend)
                 {
+                    // ── 保存移交前的推理内容，防止被 Handoff 结果覆盖 ──
+                    string preHandoffReasoning = agentResult.ReasoningContent ?? string.Empty;
+
                     await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
                     StatusLabel.Text = string.Format(LocalizationService.Instance["status.agentSwitched"], agentResult.Handoff.TargetAgent);
 
@@ -398,6 +401,14 @@ namespace DeepSeek_v4_for_VisualStudio.View
                     {
                         if (_agentFactory.EditAgent is EditAgent ea3)
                             ea3.PlanUpdated -= OnAgentPlanUpdated;
+                    }
+
+                    // ── 合并移交前和移交后的推理内容 ──
+                    if (!string.IsNullOrEmpty(preHandoffReasoning))
+                    {
+                        agentResult.ReasoningContent = string.IsNullOrEmpty(agentResult.ReasoningContent)
+                            ? preHandoffReasoning
+                            : preHandoffReasoning + "\n\n" + agentResult.ReasoningContent;
                     }
                 }
                 else if (agentResult.Handoff != null && agentResult.Handoff.ShowContinueOn)

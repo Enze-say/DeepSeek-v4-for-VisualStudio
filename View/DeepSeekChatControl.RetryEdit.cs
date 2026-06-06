@@ -251,6 +251,9 @@ namespace DeepSeek_v4_for_VisualStudio.View
                     var nextHandoff = agentResult.Handoff;
                     Logger.Info($"[AgentHandoff] AutoSend 链式跟进: → {nextHandoff.TargetAgent} ({nextHandoff.Label})");
 
+                    // ── 保存当前推理内容，防止链式 Handoff 覆盖 ──
+                    string chainPreReasoning = agentResult.ReasoningContent ?? string.Empty;
+
                     await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
                     StatusLabel.Text = string.Format(LocalizationService.Instance["status.agentSwitched"], nextHandoff.TargetAgent);
 
@@ -266,6 +269,14 @@ namespace DeepSeek_v4_for_VisualStudio.View
                     finally
                     {
                         // 事件已在 SwitchActiveAgent 中解绑旧 Agent
+                    }
+
+                    // ── 合并链式 Handoff 前后的推理内容 ──
+                    if (!string.IsNullOrEmpty(chainPreReasoning))
+                    {
+                        agentResult.ReasoningContent = string.IsNullOrEmpty(agentResult.ReasoningContent)
+                            ? chainPreReasoning
+                            : chainPreReasoning + "\n\n" + agentResult.ReasoningContent;
                     }
                 }
 

@@ -569,9 +569,13 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
                         AddLog("INFO", toolSummary);
                     });
 
-                // ── 收集推理内容（最后一个重试轮次的 thinking 覆盖前次）──
+                // ── 累积推理内容（累加所有步骤和重试轮次的思考过程）──
                 if (thinkingBuilder.Length > 0)
-                    _accumulatedReasoning = thinkingBuilder.ToString();
+                {
+                    if (!string.IsNullOrEmpty(_accumulatedReasoning))
+                        _accumulatedReasoning += "\n\n";
+                    _accumulatedReasoning += thinkingBuilder.ToString();
+                }
 
                 retryOutputs.Add(result);
 
