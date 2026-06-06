@@ -291,17 +291,16 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
                     explorationTraceMd = traceBuilder.ToString();
                 }
 
-                // ── 如果工具调用后有思考内容，附加到结果中 ──
+                // ── 如果工具调用后有思考内容，通过 ReasoningContent 传递，让 UI 渲染原生思考面板 ──
                 if (!string.IsNullOrEmpty(thinkingContent))
                 {
-                    result.Content = $"<details><summary>{LocalizationService.Instance["chat.html.thinkingTitle"]}</summary>\n\n{thinkingContent}\n\n</details>\n\n{explorationTraceMd}\n\n{aiResponse}";
+                    result.ReasoningContent = thinkingContent;
                 }
-                else
-                {
-                    result.Content = string.IsNullOrEmpty(explorationTraceMd)
-                        ? aiResponse
-                        : $"{explorationTraceMd}\n\n{aiResponse}";
-                }
+
+                // ── 最终内容 = 探索追踪 + AI 回答
+                result.Content = string.IsNullOrEmpty(explorationTraceMd)
+                    ? aiResponse
+                    : $"{explorationTraceMd}\n\n{aiResponse}";
 
                 result.Logs.AddRange(_logs);
 

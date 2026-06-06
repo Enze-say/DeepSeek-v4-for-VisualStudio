@@ -478,6 +478,7 @@ namespace DeepSeek_v4_for_VisualStudio.View
                         {
                             var msg = _messages[_agentStreamingMsgIndex];
                             msg.Content = finalContent;
+                            msg.ReasoningContent = agentResult.ReasoningContent;
                             msg.IsStreaming = false;
                             msg.IsRendered = true;
                             // ── 持久化任务计划 JSON，重启后可重建任务面板 ──
@@ -506,11 +507,12 @@ namespace DeepSeek_v4_for_VisualStudio.View
                     catch { }
 
                     // ── 同步最终内容并强制刷新，确保增量内容已推送 ──
-                    BatchStreamingUpdate(_agentStreamingMsgIndex, finalContent, string.Empty, isComplete: true);
+                    string reasoningForRender = agentResult.ReasoningContent ?? string.Empty;
+                    BatchStreamingUpdate(_agentStreamingMsgIndex, finalContent, reasoningForRender, isComplete: true);
 
                     // ── 使用非阻塞 PostWebMessageAsString 发送最终渲染（含 Markdown HTML + 执行过程）──
                     string combinedFooter = thinkingDetailsHtml + cacheFooter;
-                    PostStreamEnd(_agentStreamingMsgIndex, finalContent, string.Empty, combinedFooter);
+                    PostStreamEnd(_agentStreamingMsgIndex, finalContent, reasoningForRender, combinedFooter);
 
                     StatusLabel.Text = plan.IsCancelled
                         ? LocalizationService.Instance["agent.taskCancelled"]
@@ -545,6 +547,7 @@ namespace DeepSeek_v4_for_VisualStudio.View
                         {
                             var msg = _messages[_agentStreamingMsgIndex];
                             msg.Content = agentResult.Content;
+                            msg.ReasoningContent = agentResult.ReasoningContent;
                             msg.IsStreaming = false;
                             msg.IsRendered = true;
                             // ── 持久化 Handoff JSON，会话切换后可重建"开始执行"按钮 ──
@@ -571,10 +574,11 @@ namespace DeepSeek_v4_for_VisualStudio.View
                     catch { }
 
                     // ── 同步最终内容并强制刷新，确保增量内容已推送 ──
-                    BatchStreamingUpdate(_agentStreamingMsgIndex, agentResult.Content, string.Empty, isComplete: true);
+                    string reasoningForRender = agentResult.ReasoningContent ?? string.Empty;
+                    BatchStreamingUpdate(_agentStreamingMsgIndex, agentResult.Content, reasoningForRender, isComplete: true);
 
                     // ── 使用非阻塞 PostWebMessageAsString 发送最终渲染 ──
-                    PostStreamEnd(_agentStreamingMsgIndex, agentResult.Content, string.Empty, cacheFooter);
+                    PostStreamEnd(_agentStreamingMsgIndex, agentResult.Content, reasoningForRender, cacheFooter);
                     StatusLabel.Text = LocalizationService.Instance["status.ready"];
 
                     // ── 如果有待处理的 Handoff，注入按钮 ──

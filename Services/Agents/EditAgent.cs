@@ -28,6 +28,9 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
         private CancellationTokenSource? _agentCts;
         private ExploreAgent? _exploreAgent;
 
+        // ── 累积累推理/思考内容（跨步骤收集，供 UI 渲染思考面板）──
+        private string? _accumulatedReasoning;
+
         // ── 编辑工具（懒加载，由 EnsureEditTools 初始化）──
         private ApplyPatchTool? _applyPatchTool;
         private InsertEditTool? _insertEditTool;
@@ -150,8 +153,9 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
         /// </summary>
         public override async Task<AgentResult> ExecuteAsync(string userMessage, AgentContext context)
         {
-            // ── 清空上次执行的日志，防止 HasBuildWarningsInLogs() 被旧日志误导 ──
+            // ── 清空上次执行的日志和推理内容 ──
             _logs.Clear();
+            _accumulatedReasoning = null;
 
             var result = new AgentResult
             {
@@ -208,6 +212,10 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
                     }
                 }
             }
+
+            // ── 传递累积累的推理内容供 UI 渲染思考面板 ──
+            if (!string.IsNullOrEmpty(_accumulatedReasoning))
+                result.ReasoningContent = _accumulatedReasoning;
 
             result.Logs.AddRange(_logs);
             return result;
@@ -545,16 +553,25 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
 
                 // ── 使用工具调用循环：AI 可以先探索再修改 ──
                 AddLog("INFO", string.Format(LocalizationService.Instance["agent.log.callingAiToolLoop"], retry));
+                var thinkingBuilder = new StringBuilder();
                 result = await CallAiWithToolLoopAsync(
                     messages,
                     workspaceRoot,
                     ct,
                     maxTokens: 8192,
                     toolWhitelist: new List<string>(ExplorationTools),
+                    onThinking: (thinking) =>
+                    {
+                        thinkingBuilder.Append(thinking);
+                    },
                     onToolCall: (toolSummary) =>
                     {
                         AddLog("INFO", toolSummary);
                     });
+
+                // ── 收集推理内容（最后一个重试轮次的 thinking 覆盖前次）──
+                if (thinkingBuilder.Length > 0)
+                    _accumulatedReasoning = thinkingBuilder.ToString();
 
                 retryOutputs.Add(result);
 

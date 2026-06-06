@@ -160,15 +160,24 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
 
                 // ── 使用工具调用循环（支持 runSubagent 委派探索任务 + request_handoff 移交）──
                 string workspaceRoot = GetWorkspaceRoot(context);
+                var thinkingBuilder = new StringBuilder();
                 string aiResponse = await CallAiWithToolLoopAsync(
                     messages,
                     workspaceRoot,
                     ct,
                     maxTokens: 4096,
+                    onThinking: (thinking) =>
+                    {
+                        thinkingBuilder.Append(thinking);
+                    },
                     onToolCall: (toolSummary) =>
                     {
                         AddLog("INFO", toolSummary);
                     });
+
+                // ── 保存推理内容，供 UI 渲染思考面板 ──
+                if (thinkingBuilder.Length > 0)
+                    result.ReasoningContent = thinkingBuilder.ToString();
 
                 // ── 检查 AI 是否通过 request_handoff 请求了移交 ──
                 if (PendingHandoffRequest != null)

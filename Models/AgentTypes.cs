@@ -205,6 +205,9 @@ namespace DeepSeek_v4_for_VisualStudio.Models
         /// <summary>生成的消息内容（Markdown 格式）</summary>
         public string? Content { get; set; }
 
+        /// <summary>推理/思考内容（DeepSeek V4 reasoning_content），用于渲染思考面板</summary>
+        public string? ReasoningContent { get; set; }
+
         /// <summary>文件变更列表（Edit Agent 产出）</summary>
         public List<FileChangeSummary> FileChanges { get; set; } = new();
 

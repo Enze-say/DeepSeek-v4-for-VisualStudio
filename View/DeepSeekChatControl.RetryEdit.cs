@@ -378,6 +378,7 @@ namespace DeepSeek_v4_for_VisualStudio.View
                         {
                             var msg = _messages[_agentStreamingMsgIndex];
                             msg.Content = persistedContent;
+                            msg.ReasoningContent = agentResult.ReasoningContent;
                             msg.IsStreaming = false;
                             msg.IsRendered = true;
                             // ── 持久化任务计划 JSON，重启后可重建任务面板 ──
@@ -391,11 +392,12 @@ namespace DeepSeek_v4_for_VisualStudio.View
                     }
 
                     // ── 强制刷新 DOM 显示最终结果 ──
-                    BatchStreamingUpdate(_agentStreamingMsgIndex, persistedContent, string.Empty, isComplete: true);
+                    string reasoningForRender = agentResult.ReasoningContent ?? string.Empty;
+                    BatchStreamingUpdate(_agentStreamingMsgIndex, persistedContent, reasoningForRender, isComplete: true);
 
                     // ── 发送最终渲染：extraFooter 中注入执行过程 HTML + 缓存统计（纯 HTML，不经过 Markdown 转义）──
                     string combinedFooter = thinkingDetailsHtml + cacheFooter;
-                    PostStreamEnd(_agentStreamingMsgIndex, finalContent, string.Empty, combinedFooter);
+                    PostStreamEnd(_agentStreamingMsgIndex, finalContent, reasoningForRender, combinedFooter);
 
                     StatusLabel.Text = plan.ChangedFiles.Count > 0
                         ? string.Format(LocalizationService.Instance["agent.result.completed"], plan.ChangedFiles.Count)

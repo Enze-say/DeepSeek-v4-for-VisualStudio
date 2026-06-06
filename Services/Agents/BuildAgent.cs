@@ -136,16 +136,25 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
                 };
 
                 // ── 使用工具调用循环 ──
+                var thinkingBuilder = new StringBuilder();
                 string aiResponse = await CallAiWithToolLoopAsync(
                     messages,
                     workspaceRoot,
                     ct,
                     maxTokens: 8192,
                     toolWhitelist: new List<string>(BuildTools),
+                    onThinking: (thinking) =>
+                    {
+                        thinkingBuilder.Append(thinking);
+                    },
                     onToolCall: (toolSummary) =>
                     {
                         AddLog("INFO", toolSummary);
                     });
+
+                // ── 保存推理内容，供 UI 渲染思考面板 ──
+                if (thinkingBuilder.Length > 0)
+                    result.ReasoningContent = thinkingBuilder.ToString();
 
                 result.Content = aiResponse;
 
