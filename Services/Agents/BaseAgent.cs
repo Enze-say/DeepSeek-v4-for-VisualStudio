@@ -1559,8 +1559,8 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
                 }
             }
 
-            // ── VisualStudio_askQuestions：向用户提问并等待回答 ──
-            if (toolName == "VisualStudio_askQuestions")
+            // ── VisualStudio_askQuestions / askQuestions：向用户提问并等待回答 ──
+            if (toolName == "VisualStudio_askQuestions" || toolName == "askQuestions")
             {
                 string questionsJson = string.Empty;
                 try
@@ -1851,7 +1851,8 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
                 }
             }
 
-            // ── 注入 plan.md 内容（如果存在）──
+            // ── 注入 plan.md 概述（仅开头部分，避免完整文档占用过多 token）──
+            //     完整步骤详情已通过上方结构化列表提供，无需重复注入全部 plan.md
             string? planFilePath = context.PlanFilePath ?? activePlan?.PlanFilePath;
             if (!string.IsNullOrEmpty(planFilePath) && File.Exists(planFilePath))
             {
@@ -1860,8 +1861,11 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
                     string planMd = await Task.Run(() => File.ReadAllText(planFilePath));
                     if (planMd.Length > 0)
                     {
-                        sb.AppendLine("## 📄 详细计划文档 (plan.md)");
-                        sb.AppendLine(planMd);
+                        // 按章节截断：找到 ## 标题边界，在 ~3000 字符附近最近的一个 ## 之前切断
+                        const int maxPlanMdChars = 3000;
+                        string planOverview = TruncatePlanMdBySection(planMd, maxPlanMdChars);
+                        sb.AppendLine("## 📄 计划概述 (plan.md 开头部分)");
+                        sb.AppendLine(planOverview);
                     }
                 }
                 catch (Exception ex)
@@ -1897,6 +1901,51 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
             context.IsPlanningMode = true; // Handoff 后进入 Planning 模式执行
 
             return await targetAgent.ExecuteAsync(handoffMessage, context);
+        }
+
+        /// <summary>
+        /// 按 Markdown 章节边界截断 plan.md，在 ~maxChars 附近最近的 ## 标题前干净切断。
+        /// 避免在段落中间截断导致内容不完整。
+        /// </summary>
+        private static string TruncatePlanMdBySection(string planMd, int maxChars)
+        {
+            if (planMd.Length <= maxChars)
+                return planMd;
+
+            // 收集所有 ## 标题的位置（行首 ## ，前无更高级别 #）
+            var sectionStarts = new List<int>();
+            var lines = planMd.Split('\n');
+            int charPos = 0;
+            foreach (var line in lines)
+            {
+                string trimmed = line.TrimStart();
+                // 匹配 ## 或 ### 标题（但不匹配 # 一级标题，保留它）
+                if (trimmed.StartsWith("##") && !trimmed.StartsWith("###"))
+                {
+                    sectionStarts.Add(charPos);
+                }
+                charPos += line.Length + 1; // +1 for \n
+            }
+
+            // 从后往前找第一个在 maxChars 之前的 ## 边界
+            int cutPos = maxChars;
+            for (int i = sectionStarts.Count - 1; i >= 0; i--)
+            {
+                if (sectionStarts[i] < maxChars)
+                {
+                    cutPos = sectionStarts[i];
+                    break;
+                }
+            }
+
+            // 如果第一个 ## 都在 maxChars 之后，就用纯字符截断（只有开头概述，没有章节标题）
+            string truncated = planMd.Substring(0, cutPos).TrimEnd();
+            int keptSections = sectionStarts.Count(s => s < cutPos);
+            string note = keptSections > 0
+                ? $"\n\n... (已截断，保留了前 {keptSections} 个章节。后续步骤详情请参阅上方结构化步骤列表)"
+                : "\n\n... (已截断。各步骤详情请参阅上方结构化步骤列表)";
+
+            return truncated + note;
         }
 
         /// <summary>

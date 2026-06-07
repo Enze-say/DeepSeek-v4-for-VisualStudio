@@ -1606,6 +1606,40 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
             sb.AppendLine($"步骤详情: {step.Description}");
             sb.AppendLine();
 
+            // ── 注入 plan.md 概述 + 当前步骤对应章节 ──
+            string? planFilePath = context.PlanFilePath ?? plan.PlanFilePath;
+            if (!string.IsNullOrEmpty(planFilePath) && File.Exists(planFilePath))
+            {
+                try
+                {
+                    string planMd = File.ReadAllText(planFilePath);
+                    if (planMd.Length > 0)
+                    {
+                        // 提取概述（详细步骤章节之前的内容，截断至 ~2000 字符）
+                        string overview = ExtractPlanMdOverview(planMd);
+                        if (!string.IsNullOrEmpty(overview))
+                        {
+                            sb.AppendLine("## 📄 计划概述");
+                            sb.AppendLine(overview);
+                            sb.AppendLine();
+                        }
+
+                        // 提取当前步骤对应的章节
+                        string stepSection = ExtractPlanMdStepSection(planMd, step);
+                        if (!string.IsNullOrEmpty(stepSection))
+                        {
+                            sb.AppendLine($"## 📝 plan.md 步骤详情 (步骤 {step.Index})");
+                            sb.AppendLine(stepSection);
+                            sb.AppendLine();
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warn($"[EditAgent] 读取 plan.md 章节失败: {ex.Message}");
+                }
+            }
+
             // ── 注入前面步骤已读取的文件内容缓存（所有模式通用），避免重复 read_file 调用 ──
             if (BuiltInTools != null)
             {
@@ -1685,8 +1719,8 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
 
             // ── 提示 AI 利用已有计划上下文，避免不必要的全项目搜索 ──
             sb.AppendLine("## 重要提示");
-            sb.AppendLine("- 用户消息中已包含完整的 plan.md 计划文档，其中记录了项目结构、相关文件路径和修改方案");
-            sb.AppendLine("- 请优先使用 plan.md 中已列出的文件路径，直接用 read_file 读取目标文件内容");
+            sb.AppendLine("- 用户消息中已包含计划概述和各步骤详情，请根据当前步骤标题和描述执行任务");
+            sb.AppendLine("- 请优先使用计划中已列出的文件路径，直接用 read_file 读取目标文件内容");
             sb.AppendLine("- 仅在需要确认额外依赖关系时才使用 file_search/grep_search 搜索");
             sb.AppendLine("- 避免全项目搜索已明确指定的文件");
             sb.AppendLine();
@@ -1764,6 +1798,116 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
             }
 
             return sb.ToString();
+        }
+
+        /// <summary>
+        /// 从 plan.md 中提取概述部分（详细步骤章节之前的内容），按章节边界截断。
+        /// 在"详细步骤"/"Detailed Steps"章节标题前切断，保留项目目标、结构分析等概述信息。
+        /// </summary>
+        private static string ExtractPlanMdOverview(string planMd)
+        {
+            // 找到"详细步骤"章节的起始位置（中英文两种模式）
+            var stepSectionPatterns = new[]
+            {
+                "### 3.", "### 2.", "### 3 ", "### 2 ",
+                "## 详细步骤", "## Detailed Steps",
+                "## 📝", "## 实现步骤", "## Implementation",
+                "## 步骤", "## Steps"
+            };
+
+            int cutPos = planMd.Length;
+            foreach (var pattern in stepSectionPatterns)
+            {
+                int idx = planMd.IndexOf(pattern, StringComparison.OrdinalIgnoreCase);
+                if (idx > 0 && idx < cutPos)
+                    cutPos = idx;
+            }
+
+            string overview = planMd.Substring(0, cutPos).TrimEnd();
+            const int maxOverviewChars = 2000;
+            if (overview.Length > maxOverviewChars)
+            {
+                // 在 maxOverviewChars 附近找最近的 \n\n 段落边界切断
+                int boundary = overview.LastIndexOf("\n\n", maxOverviewChars, StringComparison.Ordinal);
+                if (boundary > maxOverviewChars / 2)
+                    overview = overview.Substring(0, boundary).TrimEnd() + "\n\n... (概述已截断)";
+                else
+                    overview = overview.Substring(0, maxOverviewChars) + "\n... (概述已截断)";
+            }
+
+            return overview;
+        }
+
+        /// <summary>
+        /// 从 plan.md 中提取当前步骤对应的章节内容。
+        /// 匹配策略：按步骤索引号（如 "步骤 1"、"Step 1"、"1."）定位到下一个同级/上级标题。
+        /// </summary>
+        private static string ExtractPlanMdStepSection(string planMd, AgentStep step)
+        {
+            // 构建匹配模式：支持 "步骤 N"、"Step N"、"#### N."、"#### Step N" 等多种格式
+            var patterns = new[]
+            {
+                $"#### 步骤 {step.Index}:", $"#### 步骤 {step.Index}：",
+                $"#### Step {step.Index}:", $"#### Step {step.Index}.",
+                $"#### {step.Index}.", $"#### {step.Index} ",
+                $"### 步骤 {step.Index}:", $"### 步骤 {step.Index}：",
+                $"### Step {step.Index}:", $"### Step {step.Index}.",
+                $"### {step.Index}.", $"### {step.Index} ",
+            };
+
+            int startIdx = -1;
+            foreach (var pattern in patterns)
+            {
+                int idx = planMd.IndexOf(pattern, StringComparison.OrdinalIgnoreCase);
+                if (idx >= 0)
+                {
+                    startIdx = idx;
+                    break;
+                }
+            }
+
+            if (startIdx < 0)
+                return string.Empty;
+
+            // 从该步骤标题的下一行开始提取
+            int contentStart = planMd.IndexOf('\n', startIdx);
+            if (contentStart < 0) return string.Empty;
+            contentStart++; // 跳过换行符
+
+            // 找到下一个 ## 或 ### 或 #### 标题作为结束边界
+            int endIdx = planMd.Length;
+            var headerPattern = System.Text.RegularExpressions.Regex.Match(
+                planMd, @"^#{2,4}\s", System.Text.RegularExpressions.RegexOptions.Multiline);
+            
+            // 使用逐行扫描找下一个标题
+            int searchStart = contentStart;
+            int nextHeader = planMd.IndexOf("\n##", searchStart, StringComparison.Ordinal);
+            if (nextHeader < 0) nextHeader = planMd.IndexOf("\r\n##", searchStart, StringComparison.Ordinal);
+            if (nextHeader >= 0) endIdx = nextHeader;
+            
+            // 也检查 ### 和 ####
+            int nextH3 = planMd.IndexOf("\n###", searchStart, StringComparison.Ordinal);
+            if (nextH3 < 0) nextH3 = planMd.IndexOf("\r\n###", searchStart, StringComparison.Ordinal);
+            if (nextH3 >= 0 && nextH3 < endIdx) endIdx = nextH3;
+            
+            int nextH4 = planMd.IndexOf("\n####", searchStart, StringComparison.Ordinal);
+            if (nextH4 < 0) nextH4 = planMd.IndexOf("\r\n####", searchStart, StringComparison.Ordinal);
+            if (nextH4 >= 0 && nextH4 < endIdx) endIdx = nextH4;
+
+            string section = planMd.Substring(contentStart, endIdx - contentStart).Trim();
+            
+            // 截断过长内容
+            const int maxSectionChars = 3000;
+            if (section.Length > maxSectionChars)
+            {
+                int boundary = section.LastIndexOf("\n\n", maxSectionChars, StringComparison.Ordinal);
+                if (boundary > maxSectionChars / 2)
+                    section = section.Substring(0, boundary).TrimEnd() + "\n\n... (章节内容已截断)";
+                else
+                    section = section.Substring(0, maxSectionChars) + "\n... (章节内容已截断)";
+            }
+
+            return section;
         }
 
         /// <summary>

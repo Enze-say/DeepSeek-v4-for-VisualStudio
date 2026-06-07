@@ -380,7 +380,7 @@ namespace DeepSeek_v4_for_VisualStudio.Services
                     or "fetch_webpage" or "build_solution"
                     or "replace_string_in_file" or "multi_replace_string_in_file" or "create_file" or "delete_file"
                     or "apply_patch" or "create_directory"
-                    or "run_in_terminal" or "get_terminal_output" or "VisualStudio_askQuestions"
+                    or "run_in_terminal" or "get_terminal_output" or "VisualStudio_askQuestions" or "askQuestions"
                     or "runSubagent" or "request_handoff" or "memory" or "git" => true,
                 _ => false
             };
