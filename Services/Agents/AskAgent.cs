@@ -63,8 +63,8 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
                         Label = LocalizationService.Instance["agent.ask.handoffEditLabel"],
                         TargetAgent = AgentType.Edit,
                         Prompt = LocalizationService.Instance["agent.ask.handoffEditPrompt"],
-                        AutoSend = false,
-                        ShowContinueOn = true,
+                        AutoSend = true,
+                        ShowContinueOn = false,
                     },
                     new AgentHandoff
                     {
