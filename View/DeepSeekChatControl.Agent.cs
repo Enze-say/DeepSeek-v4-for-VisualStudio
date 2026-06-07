@@ -727,6 +727,196 @@ namespace DeepSeek_v4_for_VisualStudio.View
 
             // ── 记录 Cache 命中率 ──
             LogCacheHitRate();
+
+            // ── 一次回答结束后根据需要自动记录 memory ──
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    string? lastUserMsg = null;
+                    string? lastAssistantMsg = null;
+                    lock (_lock)
+                    {
+                        if (_agentStreamingMsgIndex >= 0 && _agentStreamingMsgIndex < _messages.Count)
+                        {
+                            lastAssistantMsg = _messages[_agentStreamingMsgIndex].Content;
+                        }
+                        // 向前查找最近的用户消息
+                        for (int i = _agentStreamingMsgIndex - 1; i >= 0; i--)
+                        {
+                            if (_messages[i].Role == "user" && !string.IsNullOrEmpty(_messages[i].Content))
+                            {
+                                lastUserMsg = _messages[i].Content;
+                                break;
+                            }
+                        }
+                    }
+                    if (!string.IsNullOrEmpty(lastUserMsg) && !string.IsNullOrEmpty(lastAssistantMsg))
+                    {
+                        await AutoRecordMemoryAsync(lastUserMsg, lastAssistantMsg);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warn($"[Memory] 自动记忆记录异常: {ex.Message}");
+                }
+            });
+        }
+
+        /// <summary>
+        /// 在一次问答结束后，自动判断是否需要将关键信息记录到持久化记忆。
+        /// 使用轻量级非流式 API 调用，解析 AI 返回的记忆操作指令并执行。
+        /// </summary>
+        private async Task AutoRecordMemoryAsync(string userMessage, string assistantResponse)
+        {
+            if (_apiService == null || _memoryService == null) return;
+
+            try
+            {
+                // ── 构建轻量级记忆判断提示 ──
+                var systemPrompt = "你是一个记忆管理助手。你的任务是：根据一轮对话（用户问题 + AI回答），判断是否有值得持久化记忆的信息。\n\n"
+                    + "记忆作用域：\n"
+                    + "- user — 用户记忆：跨所有工作区持久化，存储用户偏好、编码习惯、常用命令等\n"
+                    + "- session — 会话记忆：当前对话内有效，存储临时上下文和进行中笔记\n"
+                    + "- repo — 仓库记忆：当前解决方案内有效，存储项目约定、构建命令、架构决策等\n\n"
+                    + "判断标准：\n"
+                    + "- 用户表达了明确的编码偏好或习惯 → 记录到 user 作用域\n"
+                    + "- 发现项目特定的构建命令、架构约定 → 记录到 repo 作用域\n"
+                    + "- 对话中做出了重要的技术决策 → 记录到 repo 作用域\n"
+                    + "- 用户纠正了 AI 的错误 → 记录到 user 作用域\n"
+                    + "- 如果是普通问答、代码解释、简单修改请求 → 不需要记录\n\n"
+                    + "输出格式：只返回 JSON 数组。如果需要记录，每个元素包含 scope（user/session/repo）、path（文件名如 notes.md）、content（markdown 内容摘要，简洁精炼）。"
+                    + "如果不需要记录，返回空数组 []。\n\n"
+                    + "示例输出：\n"
+                    + "[{\"scope\":\"user\",\"path\":\"preferences.md\",\"content\":\"用户偏好使用 var 而非显式类型声明\"}]\n"
+                    + "或\n"
+                    + "[]\n\n"
+                    + "只返回 JSON，不要包含任何其他文本。";
+
+                var userPrompt = $"## 用户消息\n{userMessage.Truncate(2000)}\n\n## AI 回答摘要\n{assistantResponse.Truncate(2000)}\n\n请判断是否有值得记录的信息。";
+
+                var messages = new List<ChatApiMessage>
+                {
+                    new ChatApiMessage { Role = "system", Content = systemPrompt },
+                    new ChatApiMessage { Role = "user", Content = userPrompt },
+                };
+
+                var rawResponse = await _apiService.CompleteAsync(messages, CancellationToken.None);
+
+                if (string.IsNullOrWhiteSpace(rawResponse))
+                {
+                    Logger.Info("[Memory] 自动记忆判断：AI 无响应，跳过");
+                    return;
+                }
+
+                // ── 解析 JSON ──
+                string json = rawResponse.Trim();
+                // 清理可能的 markdown 代码块包裹
+                if (json.StartsWith("```"))
+                {
+                    int start = json.IndexOf('\n');
+                    int end = json.LastIndexOf("```");
+                    if (start >= 0 && end > start)
+                        json = json.Substring(start + 1, end - start - 1).Trim();
+                }
+
+                if (json == "[]" || string.IsNullOrWhiteSpace(json))
+                {
+                    Logger.Info("[Memory] 自动记忆判断：无需记录");
+                    return;
+                }
+
+                using var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.ValueKind != JsonValueKind.Array)
+                {
+                    Logger.Warn($"[Memory] 自动记忆判断：AI 返回了非数组格式: {json.Truncate(200)}");
+                    return;
+                }
+
+                string? sessionId = _activeSession?.Id;
+                string? solutionPath = _solutionPath;
+
+                int recordedCount = 0;
+                foreach (var item in doc.RootElement.EnumerateArray())
+                {
+                    try
+                    {
+                        string? scopeStr = item.TryGetProperty("scope", out var s) ? s.GetString() : null;
+                        string? path = item.TryGetProperty("path", out var p) ? p.GetString() : null;
+                        string? content = item.TryGetProperty("content", out var c) ? c.GetString() : null;
+
+                        if (string.IsNullOrWhiteSpace(scopeStr) || string.IsNullOrWhiteSpace(path) || string.IsNullOrWhiteSpace(content))
+                            continue;
+
+                        var scope = scopeStr.ToLowerInvariant() switch
+                        {
+                            "session" => MemoryScope.Session,
+                            "repo" => MemoryScope.Repo,
+                            _ => MemoryScope.User,
+                        };
+
+                        // 确保路径以 .md 结尾
+                        if (!path.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
+                            path += ".md";
+
+                        // 构建完整日志路径
+                        string scopeLabel = scope switch
+                        {
+                            MemoryScope.Session => "/memories/session/",
+                            MemoryScope.Repo => "/memories/repo/",
+                            _ => "/memories/",
+                        };
+                        string fullPath = scopeLabel + path.TrimStart('/');
+
+                        // 检查是否已有同名文件，避免重复记录完全重复的内容
+                        string? existingContent = null;
+                        try
+                        {
+                            var viewResult = await _memoryService.ViewAsync(scope, path, sessionId, solutionPath);
+                            existingContent = viewResult?.Content;
+                        }
+                        catch
+                        {
+                            // 文件不存在或读取失败，视为无已有内容
+                        }
+
+                        if (!string.IsNullOrWhiteSpace(existingContent))
+                        {
+                            if (existingContent.Contains(content.Trim()))
+                            {
+                                Logger.Info($"[Memory] 跳过重复内容: {fullPath}");
+                                continue;
+                            }
+
+                            // ── 追加到已有文件末尾 ──
+                            await _memoryService.InsertAsync(scope, path, int.MaxValue, "\n\n" + content.Trim(), sessionId, solutionPath);
+                        }
+                        else
+                        {
+                            // ── 创建新文件 ──
+                            await _memoryService.CreateAsync(scope, path, content, sessionId, solutionPath);
+                        }
+
+                        recordedCount++;
+                        Logger.Info($"[Memory] 自动记录: {fullPath} ({content.Length} 字符)");
+                    }
+                    catch (Exception itemEx)
+                    {
+                        Logger.Warn($"[Memory] 单条记忆记录失败: {itemEx.Message}");
+                    }
+                }
+
+                if (recordedCount > 0)
+                    Logger.Info($"[Memory] 自动记忆记录完成: 共 {recordedCount} 条");
+            }
+            catch (JsonException jex)
+            {
+                Logger.Warn($"[Memory] 自动记忆判断 JSON 解析失败: {jex.Message}");
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn($"[Memory] 自动记忆判断异常: {ex.Message}");
+            }
         }
 
         /// <summary>
