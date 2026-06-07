@@ -391,16 +391,22 @@ namespace DeepSeek_v4_for_VisualStudio.Services
         /// 构建发送给 DeepSeek API 的完整消息列表。
         /// 正确处理 reasoning_content 回传规则。
         /// 
-        /// ── 前缀缓存优化（v1.1.9）──
-        /// 消息结构遵循"固定前缀 + 对话历史 + 动态块"三层模型：
-        ///   messages[0] = 冻结的不可变系统提示词（整个会话固定不变）
+        /// ── 前缀缓存优化（v1.1.10）──
+        /// 消息结构遵循"共享不可变前缀 + 对话历史 + Agent 专属块 + 动态块"四层模型：
+        ///   messages[0] = AiPrompts.SharedImmutablePrefix（跨 Agent 完全一致）
         ///   messages[1..N-1] = 对话历史（仅追加，不修改）→ 前缀缓存可覆盖到此
-        ///   messages[N] = 动态上下文块（压缩摘要 + 搜索 + RAG + 记忆）
-        ///   messages[N+1] = 用户消息（调用方追加）
+        ///   messages[N] = Agent 专属系统提示词（_fixedSystemPrompt，放在历史之后）
+        ///   messages[N+1] = 动态上下文块（压缩摘要 + 搜索 + RAG + 记忆）
+        ///   messages[N+2] = 用户消息（调用方追加）
         /// 
-        /// 将动态块放在对话历史之后、用户消息之前，使前缀缓存可以从 messages[0]
-        /// 一直延伸到对话历史的末尾。动态块的变化只影响它自身及之后的消息，
-        /// 对话历史的前缀在每次请求间保持稳定。
+        /// 关键改动（v1.1.10）：messages[0] 使用 AiPrompts.SharedImmutablePrefix 而非
+        /// _fixedSystemPrompt。前者跨所有 Agent 完全一致，后者包含 Agent 专属指令。
+        /// 将 Agent 专属指令从 messages[0] 移到对话历史之后，消除跨 Agent 切换时的
+        /// 前缀漂移（Prefix Drift），使 DeepSeek V4 自动前缀缓存在 Agent 切换后
+        /// 仍能命中 messages[0] 到对话历史末尾的整个前缀。
+        /// 
+        /// 此结构与 BaseAgent.BuildContextAwareMessages() 的 messages[0] 保持一致，
+        /// 两者都使用 AiPrompts.SharedImmutablePrefix。
         /// 
         /// DeepSeek V4 规则：
         /// - 如果 assistant 消息没有 tool_calls：reasoning_content 不应回传（会被 API 忽略）
@@ -411,24 +417,17 @@ namespace DeepSeek_v4_for_VisualStudio.Services
         {
             var messages = new List<ChatApiMessage>();
 
-            // ── 1. 不可变前缀：冻结的系统提示词（messages[0]，整个会话不改变）──
-            string? fixedPrompt = _fixedSystemPrompt;
-            if (!string.IsNullOrWhiteSpace(fixedPrompt))
+            // ── 1. 共享不可变前缀（messages[0]，跨 Agent 永远不变）──
+            //     使用 AiPrompts.SharedImmutablePrefix 而非 _fixedSystemPrompt，
+            //     确保与 BaseAgent.BuildContextAwareMessages() 的 messages[0] 完全一致。
+            string sharedPrefix = AiPrompts.SharedImmutablePrefix;
+            if (!string.IsNullOrWhiteSpace(sharedPrefix))
             {
-                messages.Add(new ChatApiMessage { Role = "system", Content = fixedPrompt });
-            }
-            else
-            {
-                // 回退：尚未冻结时使用动态拼接（兼容旧调用路径）
-                string? fallbackPrompt = BuildFinalSystemPrompt();
-                if (!string.IsNullOrWhiteSpace(fallbackPrompt))
-                {
-                    messages.Add(new ChatApiMessage { Role = "system", Content = fallbackPrompt });
-                }
+                messages.Add(new ChatApiMessage { Role = "system", Content = sharedPrefix });
             }
 
             // ── 2. 遍历对话历史，正确构建消息 ──
-            //     历史位于系统提示词之后，使前缀缓存可连续命中所有不变的对话消息
+            //     历史位于共享前缀之后，使前缀缓存可连续命中所有不变的对话消息
             foreach (var entry in _entries)
             {
                 // 跳过没有内容的条目（除非有 tool_calls）
@@ -469,28 +468,43 @@ namespace DeepSeek_v4_for_VisualStudio.Services
                 messages.Add(apiMsg);
             }
 
-            // ── 3. 动态上下文块：放在对话历史之后、用户消息之前 ──
+            // ── 3. Agent 专属系统提示词：放在对话历史之后、动态块之前 ──
+            //     原来是 messages[0]，现移到此处，使 Agent 切换不影响 messages[0] 的缓存稳定性。
+            //     内容 = 用户自定义 prompt + AskAgent prompt + MultiAgent + Memory + Workspace + Skill 上下文。
+            string? fixedPrompt = _fixedSystemPrompt;
+            if (!string.IsNullOrWhiteSpace(fixedPrompt))
+            {
+                messages.Add(new ChatApiMessage { Role = "system", Content = fixedPrompt });
+            }
+            else
+            {
+                // 回退：尚未冻结时使用动态拼接（兼容旧调用路径）
+                string? fallbackPrompt = BuildFinalSystemPrompt();
+                if (!string.IsNullOrWhiteSpace(fallbackPrompt))
+                {
+                    messages.Add(new ChatApiMessage { Role = "system", Content = fallbackPrompt });
+                }
+            }
+
+            // ── 4. 动态上下文块：放在 Agent 专属提示词之后、用户消息之前 ──
             //     将压缩摘要、搜索、RAG、记忆合并为一条 system 消息，放在历史末尾。
-            //     这样对话历史的前缀完全稳定，动态变化只影响这一条及其后的用户消息。
             string? dynamicBlock = BuildDynamicContextBlock();
             if (!string.IsNullOrWhiteSpace(dynamicBlock))
             {
                 messages.Add(new ChatApiMessage { Role = "system", Content = dynamicBlock });
             }
 
-            // ── 4. 前缀缓存漂移检测（若有 PrefixCacheManager 注入）──
+            // ── 5. 前缀缓存漂移检测（若有 PrefixCacheManager 注入）──
             //     注意：此处仅记录日志，不阻止请求。实际指纹对比需要 tool 列表，
             //     由调用方（DeepSeekApiService）在发送前完成。
+            //     由于 messages[0] 现在是 SharedImmutablePrefix（跨 Agent 不变），
+            //     只有在 tool 集变化时才会触发漂移（正常现象，re-pin 后恢复）。
             if (_prefixCacheManager != null && _prefixCacheManager.IsPinned)
             {
-                string? currentFixedPrompt = _fixedSystemPrompt ?? BuildFinalSystemPrompt();
-                if (!string.IsNullOrWhiteSpace(currentFixedPrompt))
+                string spFp = PrefixCacheManager.ComputeSystemPromptFingerprint(sharedPrefix);
+                if (spFp != _prefixCacheManager.PinnedCombinedFingerprint?.Split('|').FirstOrDefault())
                 {
-                    string spFp = PrefixCacheManager.ComputeSystemPromptFingerprint(currentFixedPrompt);
-                    if (spFp != _prefixCacheManager.PinnedCombinedFingerprint?.Split('|').FirstOrDefault())
-                    {
-                        Logger.Warn($"[PrefixCache] System prompt 指纹与 pinned 基准不匹配，缓存可能失效");
-                    }
+                    Logger.Warn($"[PrefixCache] System prompt 指纹与 pinned 基准不匹配，缓存可能失效");
                 }
             }
 
@@ -546,7 +560,8 @@ namespace DeepSeek_v4_for_VisualStudio.Services
         /// <summary>
         /// 构建仅包含最近 N 轮的 API 消息列表（用于 Agent 子调用）。
         /// 以 user 消息为轮次边界，保留完整的 tool 调用链。
-        /// 前缀结构同 BuildApiMessages()：messages[0] = 冻结 prompt，历史在中间，动态块在末尾。
+        /// 前缀结构同 BuildApiMessages()：messages[0] = SharedImmutablePrefix，
+        /// Agent 专属提示词和动态块放在对话历史之后。
         /// </summary>
         /// <param name="maxTurns">保留的最大轮次数</param>
         public List<ChatApiMessage> BuildApiMessagesRecentTurns(int maxTurns)
@@ -574,15 +589,11 @@ namespace DeepSeek_v4_for_VisualStudio.Services
             // 构建截断后的消息列表（前缀结构与 BuildApiMessages 一致）
             var messages = new List<ChatApiMessage>();
 
-            // ── 1. 不可变前缀 ──
-            string? fixedPrompt = _fixedSystemPrompt;
-            if (!string.IsNullOrWhiteSpace(fixedPrompt))
-                messages.Add(new ChatApiMessage { Role = "system", Content = fixedPrompt });
-            else
+            // ── 1. 共享不可变前缀 ──
+            string sharedPrefix = AiPrompts.SharedImmutablePrefix;
+            if (!string.IsNullOrWhiteSpace(sharedPrefix))
             {
-                string? fallbackPrompt = BuildFinalSystemPrompt();
-                if (!string.IsNullOrWhiteSpace(fallbackPrompt))
-                    messages.Add(new ChatApiMessage { Role = "system", Content = fallbackPrompt });
+                messages.Add(new ChatApiMessage { Role = "system", Content = sharedPrefix });
             }
 
             // ── 2. 从 startEntryIdx 开始构建对话历史 ──
@@ -615,7 +626,20 @@ namespace DeepSeek_v4_for_VisualStudio.Services
                 messages.Add(apiMsg);
             }
 
-            // ── 3. 动态上下文块（放在历史之后）──
+            // ── 3. Agent 专属系统提示词（放在历史之后）──
+            string? fixedPrompt = _fixedSystemPrompt;
+            if (!string.IsNullOrWhiteSpace(fixedPrompt))
+            {
+                messages.Add(new ChatApiMessage { Role = "system", Content = fixedPrompt });
+            }
+            else
+            {
+                string? fallbackPrompt = BuildFinalSystemPrompt();
+                if (!string.IsNullOrWhiteSpace(fallbackPrompt))
+                    messages.Add(new ChatApiMessage { Role = "system", Content = fallbackPrompt });
+            }
+
+            // ── 4. 动态上下文块（放在历史之后）──
             string? dynamicBlock = BuildDynamicContextBlock();
             if (!string.IsNullOrWhiteSpace(dynamicBlock))
                 messages.Add(new ChatApiMessage { Role = "system", Content = dynamicBlock });

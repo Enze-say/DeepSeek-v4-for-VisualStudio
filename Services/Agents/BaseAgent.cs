@@ -47,10 +47,13 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
         /// 
         /// 内容 = CommonSystemPromptPrefixCore（角色定义 + 文件规则 + 终端规则 +
         /// Handoff 规则）+ 语言指令。
+        /// 
+        /// 委托给 AiPrompts.SharedImmutablePrefix，确保与 ConversationContextManager
+        /// 的 BuildApiMessages 使用完全相同的 messages[0] 内容。
         /// </summary>
         protected static string GetSharedImmutablePrefix()
         {
-            return CommonSystemPromptPrefixCore + LocalizationService.Instance["system.agent.languageInstruction"] + "\n";
+            return AiPrompts.SharedImmutablePrefix;
         }
 
         /// <summary>
@@ -84,6 +87,12 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
 
         /// <summary>向用户提问事件（VisualStudio_askQuestions 工具使用）</summary>
         public event Action<AgentQuestionRequest>? QuestionsRequested;
+
+        /// <summary>
+        /// QuestionsRequested 事件的当前订阅者数量（诊断用）。
+        /// 供外部代码（如 DeepSeekChatControl）在绑定/解绑后验证订阅状态。
+        /// </summary>
+        public int QuestionsRequestedHandlerCount => QuestionsRequested?.GetInvocationList().Length ?? 0;
 
         /// <summary>文件变更实时通知事件（编辑阶段逐文件推送）</summary>
         public event Action<AgentFileChangeEventArgs>? FileChangeNotified;
@@ -1158,7 +1167,10 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
                                         Message = $"[Explore] {log.Message.Truncate(200)}"
                                     });
                                 }
-                                // 记录一条汇总日志（避免海量子日志淹没输出）
+                                // ── 通过 AddLog 触发 LogEntryAdded 事件，使 UI 实时更新执行进度 ──
+                                //     修复：之前仅用 _logs.Add() 导入日志，不触发事件，
+                                //     导致 @agent 路由时 UI 思考面板不显示 ExploreAgent 执行流程。
+                                AddLog("INFO", $"[Explore] 探索完成: {exploreResult.Logs.Count} 条日志, {exploreResult.Content?.Length ?? 0} 字符结果");
                                 Logger.Info($"[{Definition.Name}][Explore] ExploreAgent 完成: {exploreResult.Logs.Count} 条日志, {exploreResult.Content?.Length ?? 0} 字符结果");
                             }
                         }
@@ -2782,7 +2794,23 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
                 _pendingQuestions[request.RequestId] = request;
                 // 向后兼容
                 PendingQuestion = request;
-                QuestionsRequested?.Invoke(request);
+
+                // ── 诊断：记录事件订阅状态 ──
+                int handlerCount = QuestionsRequested?.GetInvocationList().Length ?? 0;
+                Logger.Info($"[Agent:{Definition.Name}] QuestionsRequested 事件订阅数: {handlerCount}, RequestId={request.RequestId}");
+
+                if (handlerCount == 0)
+                {
+                    // ── 无 UI 处理器订阅 → 无法向用户展示问题，立即返回空答案避免永久阻塞 ──
+                    Logger.Warn($"[Agent:{Definition.Name}] ⚠️ QuestionsRequested 事件无订阅者！" +
+                        $"无法向用户展示 {questions.Count} 个问题。请检查 Agent 事件绑定链。" +
+                        $"当前活跃 Agent: {Definition.Type}, RequestId={request.RequestId}");
+                    _pendingQuestions.TryRemove(request.RequestId, out _);
+                    PendingQuestion = null;
+                    return "[]"; // 返回空答案，让 AI 知道用户未回答
+                }
+
+                QuestionsRequested!.Invoke(request);
                 AddLog("INFO", string.Format(LocalizationService.Instance["agent.log.waitingAnswers"],
                     questions.Count, questions[0].Header.Truncate(60)));
 

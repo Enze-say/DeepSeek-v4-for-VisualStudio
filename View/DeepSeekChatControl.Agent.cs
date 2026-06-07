@@ -219,6 +219,7 @@ namespace DeepSeek_v4_for_VisualStudio.View
             agent.FileChangeNotified += OnAgentFileChangeNotified;
             agent.PermissionRequested += OnAgentPermissionRequested;
             agent.QuestionsRequested += OnAgentQuestionsRequested;
+            Logger.Info($"[Agent] 事件已绑定 → {agent.Definition.Type} (QuestionsRequested 订阅数: {agent.QuestionsRequestedHandlerCount})");
         }
 
         /// <summary>
@@ -238,6 +239,7 @@ namespace DeepSeek_v4_for_VisualStudio.View
         /// </summary>
         private void SwitchActiveAgent(BaseAgent newAgent, AgentContext context)
         {
+            var oldType = _activeAgent?.Definition.Type.ToString() ?? "null";
             if (_activeAgent != null)
                 UnbindAgentEvents(_activeAgent);
 
@@ -245,7 +247,7 @@ namespace DeepSeek_v4_for_VisualStudio.View
             _activeAgent.Context = context;
 
             BindAgentEvents(_activeAgent);
-            Logger.Info($"[Agent] 切换活跃 Agent: → {_activeAgent.Definition.Type}");
+            Logger.Info($"[Agent] 切换活跃 Agent: {oldType} → {_activeAgent.Definition.Type} (QuestionsRequested 订阅数: {_activeAgent.QuestionsRequestedHandlerCount})");
         }
 
         /// <summary>
