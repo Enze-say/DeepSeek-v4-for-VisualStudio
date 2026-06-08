@@ -239,13 +239,9 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
             string userMessage, AgentContext context)
         {
             var L = LocalizationService.Instance;
-            var messages = new List<ChatApiMessage>
-            {
-                new ChatApiMessage { Role = "system", Content = GetSharedImmutablePrefix() },
-                new ChatApiMessage { Role = "system", Content = Definition.SystemPrompt },
-            };
 
             // ── 缓存检查：如 ExploreAgent 已有结构缓存，注入摘要跳过重复扫描 ──
+            var extraSystemMessages = new List<ChatApiMessage>();
             string? structureCache = null;
             if (!string.IsNullOrEmpty(context.SolutionPath) && _exploreAgent != null)
             {
@@ -253,15 +249,14 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
                 if (cachedFiles != null && cachedFiles.Count > 0)
                 {
                     structureCache = BuildStructureContextFromCache(cachedFiles);
+                    extraSystemMessages.Add(new ChatApiMessage { Role = "system", Content = structureCache });
                     AddLog("INFO", string.Format(L["agent.log.explorePhase1Cached"], cachedFiles.Count));
                 }
             }
 
-            messages.Add(new ChatApiMessage
-            {
-                Role = "user",
-                Content = BuildUnifiedDiscoveryPrompt(userMessage, context, structureCache)
-            });
+            // ── 构建消息列表（含对话历史，保持前缀缓存稳定）──
+            string discoveryPrompt = BuildUnifiedDiscoveryPrompt(userMessage, context, structureCache);
+            var messages = BuildContextAwareMessages(Definition.SystemPrompt, discoveryPrompt, extraSystemMessages);
 
             AddLog("INFO", L["agent.log.explorePhase1"]);
 

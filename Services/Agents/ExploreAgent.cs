@@ -231,13 +231,10 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
             {
                 var ct = context.CancellationToken;
 
-                // ── 构建消息列表 ──
-                var messages = new List<ChatApiMessage>
-                {
-                    new ChatApiMessage { Role = "system", Content = GetSharedImmutablePrefix() },
-                    new ChatApiMessage { Role = "system", Content = Definition.SystemPrompt },
-                    new ChatApiMessage { Role = "user", Content = BuildExplorePrompt(userMessage, context) }
-                };
+                // ── 构建消息列表（含对话历史，保持前缀缓存稳定）──
+                var messages = BuildContextAwareMessages(
+                    Definition.SystemPrompt,
+                    BuildExplorePrompt(userMessage, context));
 
                 // ── 解析工作区根目录 ──
                 // 对 .sln 文件取目录；对文件夹项目保持目录原样。

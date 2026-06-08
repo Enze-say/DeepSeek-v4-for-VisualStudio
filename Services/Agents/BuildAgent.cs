@@ -133,13 +133,11 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
                 // ── 构建上下文增强消息 ──
                 string enhancedMessage = BuildEnhancedUserMessage(userMessage, context);
 
-                // ── 构建消息列表 ──
-                var messages = new List<ChatApiMessage>
-                {
-                    new ChatApiMessage { Role = "system", Content = GetSharedImmutablePrefix() },
-                    new ChatApiMessage { Role = "system", Content = Definition.SystemPrompt },
-                    new ChatApiMessage { Role = "user", Content = enhancedMessage }
-                };
+                // ── 构建消息列表（含对话历史 + Agent 专属 prompt）──
+                var messages = BuildContextAwareMessages(
+                    Definition.SystemPrompt,
+                    enhancedMessage,
+                    maxRecentTurns: int.MaxValue);
 
                 // ── 使用工具调用循环 ──
                 var thinkingBuilder = new StringBuilder();
