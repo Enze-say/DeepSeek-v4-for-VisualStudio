@@ -426,8 +426,36 @@ namespace DeepSeek_v4_for_VisualStudio.Services
                 messages.Add(new ChatApiMessage { Role = "system", Content = sharedPrefix });
             }
 
-            // ── 2. 遍历对话历史，正确构建消息 ──
-            //     历史位于共享前缀之后，使前缀缓存可连续命中所有不变的对话消息
+            // ── 2. Agent 专属系统提示词：紧接在共享前缀之后，放在固定位置 ──
+            //     原来放在对话历史末尾，导致历史增长时位置不断后移，cache key 漂移。
+            //     现在固定在 messages[1]，确保主流程与 Agent 子调用的前缀结构一致，
+            //     DeepSeek 前缀缓存在跨路径切换时仍能命中。
+            //     内容 = 用户自定义 prompt + AskAgent prompt + MultiAgent + Memory + Workspace + Skill 上下文。
+            string? fixedPrompt = _fixedSystemPrompt;
+            if (!string.IsNullOrWhiteSpace(fixedPrompt))
+            {
+                messages.Add(new ChatApiMessage { Role = "system", Content = fixedPrompt });
+            }
+            else
+            {
+                // 回退：尚未冻结时使用动态拼接（兼容旧调用路径）
+                string? fallbackPrompt = BuildFinalSystemPrompt();
+                if (!string.IsNullOrWhiteSpace(fallbackPrompt))
+                {
+                    messages.Add(new ChatApiMessage { Role = "system", Content = fallbackPrompt });
+                }
+            }
+
+            // ── 3. 动态上下文块：放在固定前缀之后、对话历史之前 ──
+            //     将压缩摘要、搜索、RAG、记忆合并为一条 system 消息。
+            string? dynamicBlock = BuildDynamicContextBlock();
+            if (!string.IsNullOrWhiteSpace(dynamicBlock))
+            {
+                messages.Add(new ChatApiMessage { Role = "system", Content = dynamicBlock });
+            }
+
+            // ── 4. 遍历对话历史，正确构建消息 ──
+            //     历史位于固定前缀之后，使前缀缓存可连续命中所有不变的对话消息
             foreach (var entry in _entries)
             {
                 // 跳过没有内容的条目（除非有 tool_calls）
@@ -466,32 +494,6 @@ namespace DeepSeek_v4_for_VisualStudio.Services
                 }
 
                 messages.Add(apiMsg);
-            }
-
-            // ── 3. Agent 专属系统提示词：放在对话历史之后、动态块之前 ──
-            //     原来是 messages[0]，现移到此处，使 Agent 切换不影响 messages[0] 的缓存稳定性。
-            //     内容 = 用户自定义 prompt + AskAgent prompt + MultiAgent + Memory + Workspace + Skill 上下文。
-            string? fixedPrompt = _fixedSystemPrompt;
-            if (!string.IsNullOrWhiteSpace(fixedPrompt))
-            {
-                messages.Add(new ChatApiMessage { Role = "system", Content = fixedPrompt });
-            }
-            else
-            {
-                // 回退：尚未冻结时使用动态拼接（兼容旧调用路径）
-                string? fallbackPrompt = BuildFinalSystemPrompt();
-                if (!string.IsNullOrWhiteSpace(fallbackPrompt))
-                {
-                    messages.Add(new ChatApiMessage { Role = "system", Content = fallbackPrompt });
-                }
-            }
-
-            // ── 4. 动态上下文块：放在 Agent 专属提示词之后、用户消息之前 ──
-            //     将压缩摘要、搜索、RAG、记忆合并为一条 system 消息，放在历史末尾。
-            string? dynamicBlock = BuildDynamicContextBlock();
-            if (!string.IsNullOrWhiteSpace(dynamicBlock))
-            {
-                messages.Add(new ChatApiMessage { Role = "system", Content = dynamicBlock });
             }
 
             // ── 5. 前缀缓存漂移检测（若有 PrefixCacheManager 注入）──
@@ -598,7 +600,25 @@ namespace DeepSeek_v4_for_VisualStudio.Services
                 messages.Add(new ChatApiMessage { Role = "system", Content = sharedPrefix });
             }
 
-            // ── 2. 从 startEntryIdx 开始构建对话历史 ──
+            // ── 2. Agent 专属系统提示词（固定位置，在历史之前）──
+            string? fixedPrompt = _fixedSystemPrompt;
+            if (!string.IsNullOrWhiteSpace(fixedPrompt))
+            {
+                messages.Add(new ChatApiMessage { Role = "system", Content = fixedPrompt });
+            }
+            else
+            {
+                string? fallbackPrompt = BuildFinalSystemPrompt();
+                if (!string.IsNullOrWhiteSpace(fallbackPrompt))
+                    messages.Add(new ChatApiMessage { Role = "system", Content = fallbackPrompt });
+            }
+
+            // ── 3. 动态上下文块（固定位置，在历史之前）──
+            string? dynamicBlock = BuildDynamicContextBlock();
+            if (!string.IsNullOrWhiteSpace(dynamicBlock))
+                messages.Add(new ChatApiMessage { Role = "system", Content = dynamicBlock });
+
+            // ── 4. 从 startEntryIdx 开始构建对话历史 ──
             for (int i = startEntryIdx; i < _entries.Count; i++)
             {
                 var entry = _entries[i];
@@ -627,24 +647,6 @@ namespace DeepSeek_v4_for_VisualStudio.Services
 
                 messages.Add(apiMsg);
             }
-
-            // ── 3. Agent 专属系统提示词（放在历史之后）──
-            string? fixedPrompt = _fixedSystemPrompt;
-            if (!string.IsNullOrWhiteSpace(fixedPrompt))
-            {
-                messages.Add(new ChatApiMessage { Role = "system", Content = fixedPrompt });
-            }
-            else
-            {
-                string? fallbackPrompt = BuildFinalSystemPrompt();
-                if (!string.IsNullOrWhiteSpace(fallbackPrompt))
-                    messages.Add(new ChatApiMessage { Role = "system", Content = fallbackPrompt });
-            }
-
-            // ── 4. 动态上下文块（放在历史之后）──
-            string? dynamicBlock = BuildDynamicContextBlock();
-            if (!string.IsNullOrWhiteSpace(dynamicBlock))
-                messages.Add(new ChatApiMessage { Role = "system", Content = dynamicBlock });
 
             return messages;
         }
