@@ -343,6 +343,36 @@ namespace DeepSeek_v4_for_VisualStudio.Services
             return definitions;
         }
 
+        /// <summary>
+        /// 获取完整工具定义列表（不过滤白名单），用于 DeepSeek Prefix Cache 稳定。
+        /// 合并内置工具和 MCP 外部工具。同名时 MCP 工具优先（覆盖内置）。
+        /// 按工具名称稳定排序，确保每次返回顺序一致。
+        /// </summary>
+        public List<ToolDefinition> GetFullToolDefinitions()
+        {
+            var definitions = new List<ToolDefinition>();
+
+            // ── 1. 先收集 MCP 外部工具（同名时优先 MCP）──
+            List<ToolDefinition> mcpDefs = new();
+            if (_mcpManager != null && _mcpManager.AllTools.Count > 0)
+            {
+                mcpDefs = _mcpManager.GetToolDefinitions(); // 不过滤，全部加入
+                definitions.AddRange(mcpDefs);
+            }
+
+            // ── 2. 添加所有内置工具（排除与 MCP 同名的）──
+            var mcpNames = new HashSet<string>(mcpDefs.Select(d => d.Function.Name), StringComparer.OrdinalIgnoreCase);
+            var builtInDefs = _tools.Values
+                .Select(t => t.GetDefinition())
+                .Where(d => !mcpNames.Contains(d.Function.Name))
+                .ToList();
+            definitions.AddRange(builtInDefs);
+
+            Logger.Info($"[BuiltInTool] Full tool definitions: {definitions.Count} (MCP: {mcpDefs.Count}, BuiltIn: {builtInDefs.Count})");
+
+            return definitions;
+        }
+
         #endregion
 
         #region Tool Execution

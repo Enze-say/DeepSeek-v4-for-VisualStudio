@@ -58,12 +58,17 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
                 ArgumentHint = LocalizationService.Instance["agent.plan.argumentHint"],
                 UserInvocable = true,
                 DisableModelInvocation = false,
-                // Plan Agent 不再持有直接读取工具，所有探索通过 runSubagent 委派给 ExploreAgent
+                // 🔑 Prefix Cache 优化：全会话统一工具集。所有阶段使用相同工具白名单。
+                // 深度探索通过 runSubagent 委派给 ExploreAgent；快速查阅允许直接使用只读工具。
                 AllowedTools = new List<string>
                 {
                     "runSubagent",               // 调用 Explore 子代理进行代码库探索
                     "VisualStudio_askQuestions",  // 向用户提问澄清
                     "memory",                     // 记忆管理
+                    "list_dir",                   // 列出目录（对齐阶段快速查阅）
+                    "read_file",                  // 读取文件（对齐阶段快速查阅）
+                    "grep_search",                // 文本搜索（对齐阶段快速查阅）
+                    "file_search",                // 文件搜索（对齐阶段快速查阅）
                 },
                 SubAgents = new List<AgentType> { AgentType.Explore },
                 Handoffs = new List<AgentHandoff>
@@ -262,12 +267,12 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
 
             try
             {
+                // 🔑 使用统一工具白名单（不再按阶段过滤 tools JSON，由客户端拦截保证安全）
                 await CallAiWithToolLoopAsync(
                     messages,
                     workspaceRoot: context.SolutionPath,
                     ct: context.CancellationToken,
-                    maxTokens: 8192,
-                    toolWhitelist: new List<string> { "runSubagent" });
+                    maxTokens: 8192);
             }
             catch (Exception ex)
             {
@@ -457,12 +462,12 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
 
                 // ── 使用 onContent 回调实时捕获 AI 生成的规划概要 ──
                 var alignmentContent = new StringBuilder();
+                // 🔑 使用统一工具白名单（不再按阶段过滤 tools JSON，由客户端拦截保证安全）
                 string alignmentResult = await CallAiWithToolLoopAsync(
                     existingMessages,
                     context.SolutionPath,
                     ct,
                     maxTokens: 4096,
-                    toolWhitelist: new List<string> { "VisualStudio_askQuestions", "list_dir", "read_file", "grep_search", "file_search" },
                     onContent: (chunk) =>
                     {
                         alignmentContent.Append(chunk);

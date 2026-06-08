@@ -107,6 +107,52 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
             return result;
         }
 
+        /// <summary>
+        /// 构建完整工具集（不过滤白名单），用于 DeepSeek Prefix Cache 稳定。
+        /// 所有 API 调用统一发送此完整工具集，保持 tools JSON 不变。
+        /// 工具调用由客户端按 Agent 白名单拦截。
+        /// </summary>
+        protected List<ToolDefinition> BuildFullToolSet()
+        {
+            var fullSet = new List<ToolDefinition>();
+            if (BuiltInTools != null)
+            {
+                fullSet.AddRange(BuiltInTools.GetFullToolDefinitions());
+            }
+            else if (McpManager != null && McpManager.AllTools.Count > 0)
+            {
+                fullSet.AddRange(McpManager.GetToolDefinitions());
+            }
+            return fullSet;
+        }
+
+        /// <summary>
+        /// 获取当前会话的完整工具集（缓存，避免重复构建）。
+        /// 在 MCP 工具变更时调用 <see cref="InvalidateFullToolSetCache"/> 刷新。
+        /// </summary>
+        private List<ToolDefinition>? _cachedFullToolSet;
+
+        /// <summary>
+        /// 获取或构建缓存的完整工具集。
+        /// </summary>
+        protected List<ToolDefinition> GetFullToolSet()
+        {
+            if (_cachedFullToolSet == null)
+            {
+                _cachedFullToolSet = BuildFullToolSet();
+            }
+            return _cachedFullToolSet;
+        }
+
+        /// <summary>
+        /// 使缓存的完整工具集失效（MCP 工具变更时调用）。
+        /// </summary>
+        public void InvalidateFullToolSetCache()
+        {
+            _cachedFullToolSet = null;
+            Logger.Info($"[Agent:{Definition.Name}] 完整工具集缓存已失效（MCP 工具变更）");
+        }
+
         private static bool IsReadMcpTool(McpTool tool)
         {
             // 前缀匹配
@@ -305,7 +351,8 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
 
             var sb = new StringBuilder();
             // toolChoice: "none" — 简短回答无需工具调用，防止 AI 生成工具调用 XML 污染输出
-            await foreach (var chunk in _apiService.ChatStreamAsync(messages, null, ct, maxTokens, toolChoice: "none"))
+            // 🔑 传入完整工具集以保持 Prefix Cache 稳定
+            await foreach (var chunk in _apiService.ChatStreamAsync(messages, TryGetFullToolSet(), ct, maxTokens, toolChoice: "none"))
             {
                 if (IsContentChunk(chunk))
                     sb.Append(chunk);
@@ -322,7 +369,8 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
             var messages = BuildContextAwareMessages(systemPrompt, userPrompt);
 
             var sb = new StringBuilder();
-            await foreach (var chunk in _apiService.ChatStreamAsync(messages, null, ct, maxTokens, temperature: temperature, responseFormat: responseFormat))
+            // 🔑 传入完整工具集 + toolChoice:"none" 以保持 Prefix Cache 稳定
+            await foreach (var chunk in _apiService.ChatStreamAsync(messages, TryGetFullToolSet(), ct, maxTokens, temperature: temperature, responseFormat: responseFormat, toolChoice: "none"))
             {
                 if (IsContentChunk(chunk))
                     sb.Append(chunk);
@@ -350,7 +398,8 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
             var messages = BuildContextAwareMessages(systemPrompt, userPrompt, extraSystemMessages);
 
             var sb = new StringBuilder();
-            await foreach (var chunk in _apiService.ChatStreamAsync(messages, null, ct, maxTokens, toolChoice, temperature, responseFormat))
+            // 🔑 传入完整工具集以保持 Prefix Cache 稳定
+            await foreach (var chunk in _apiService.ChatStreamAsync(messages, TryGetFullToolSet(), ct, maxTokens, toolChoice, temperature, responseFormat))
             {
                 if (IsContentChunk(chunk))
                     sb.Append(chunk);
@@ -365,7 +414,8 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
         protected async Task<string> CallAiWithHistoryAsync(List<ChatApiMessage> history, CancellationToken ct, int maxTokens = 4096, string? responseFormat = null)
         {
             var sb = new StringBuilder();
-            await foreach (var chunk in _apiService.ChatStreamAsync(history, null, ct, maxTokens, responseFormat: responseFormat))
+            // 🔑 传入完整工具集 + toolChoice:"none" 以保持 Prefix Cache 稳定
+            await foreach (var chunk in _apiService.ChatStreamAsync(history, TryGetFullToolSet(), ct, maxTokens, responseFormat: responseFormat, toolChoice: "none"))
             {
                 if (IsContentChunk(chunk))
                     sb.Append(chunk);
@@ -388,6 +438,10 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
         /// <param name="toolChoice">工具调用策略（"none" 禁用工具）</param>
         /// <param name="temperature">采样温度（0.0 = 确定性输出）</param>
         /// <param name="responseFormat">JSON Output 模式: "json_object" 启用，null 不启用</param>
+        /// <summary>
+        /// 使用预构建消息列表调用 AI（支持 toolChoice 和 temperature 参数）。
+        /// 🔑 始终传入完整工具集 + toolChoice="none" 以保持 Prefix Cache 稳定。
+        /// </summary>
         protected async Task<string> CallAiWithMessagesAsync(
             List<ChatApiMessage> messages,
             CancellationToken ct,
@@ -396,14 +450,30 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
             double? temperature = null,
             string? responseFormat = null)
         {
+            // 🔑 传入完整工具集以保持 Prefix Cache 稳定
+            var fullTools = TryGetFullToolSet();
             var sb = new StringBuilder();
-            await foreach (var chunk in _apiService.ChatStreamAsync(messages, null, ct, maxTokens, toolChoice, temperature, responseFormat))
+            await foreach (var chunk in _apiService.ChatStreamAsync(messages, fullTools, ct, maxTokens, toolChoice, temperature, responseFormat))
             {
                 if (IsContentChunk(chunk))
                     sb.Append(chunk);
             }
             LogCacheHitRate();
             return sb.ToString().Trim();
+        }
+
+        /// <summary>
+        /// 安全获取完整工具集（Agent 未初始化时返回 null 降级）。
+        /// </summary>
+        private List<ToolDefinition>? TryGetFullToolSet()
+        {
+            try
+            {
+                if (BuiltInTools != null || (McpManager != null && McpManager.AllTools.Count > 0))
+                    return GetFullToolSet();
+            }
+            catch { }
+            return null;
         }
 
         /// <summary>
@@ -414,7 +484,8 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
         {
             var messages = ctxManager.BuildApiMessages();
             var sb = new StringBuilder();
-            await foreach (var chunk in _apiService.ChatStreamAsync(messages, null, ct, maxTokens, responseFormat: responseFormat))
+            // 🔑 传入完整工具集 + toolChoice:"none" 以保持 Prefix Cache 稳定
+            await foreach (var chunk in _apiService.ChatStreamAsync(messages, TryGetFullToolSet(), ct, maxTokens, responseFormat: responseFormat, toolChoice: "none"))
             {
                 if (IsContentChunk(chunk))
                     sb.Append(chunk);
@@ -580,13 +651,18 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
                 contentBuilder.Clear();
 
                 // ── 获取工具定义 ──
+                // 🔑 Prefix Cache 优化：始终发送完整工具集（所有内置 + MCP 工具），
+                //    保持 tools JSON 跨 Agent/阶段不变，最大化 DeepSeek Prefix Cache 命中率。
+                //    工具调用由客户端按白名单拦截（见下方拦截逻辑）。
                 List<ToolDefinition>? toolDefs = null;
+                List<string>? effectiveWhitelist = null;
                 if (BuiltInTools != null || McpManager != null)
                 {
-                    toolDefs = new List<ToolDefinition>();
+                    // ── 始终发送完整工具集（不对 tools JSON 做白名单过滤）──
+                    toolDefs = GetFullToolSet();
 
-                    // 使用自定义白名单或默认 Definition.AllowedTools
-                    var effectiveWhitelist = toolWhitelist ?? Definition.AllowedTools;
+                    // ── 构建白名单（仅用于客户端拦截，不影响 tools JSON）──
+                    effectiveWhitelist = toolWhitelist ?? Definition.AllowedTools;
 
                     if (Definition.Type != AgentType.Edit && Definition.Type != AgentType.Build && effectiveWhitelist != null)
                     {
@@ -610,22 +686,8 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
                         }
                     }
 
-                    // 内置工具（含通过 BuiltInToolService 统一管理的 MCP 工具）
-                    if (BuiltInTools != null)
-                    {
-                        var builtInDefs = BuiltInTools.GetFilteredToolDefinitions(effectiveWhitelist);
-                        toolDefs.AddRange(builtInDefs);
-                    }
-                    // MCP 工具已由 BuiltInTools.GetFilteredToolDefinitions 统一返回，无需再次添加
-                    else if (McpManager != null && McpManager.AllTools.Count > 0)
-                    {
-                        // 仅当 BuiltInTools 不可用时才单独获取 MCP 工具
-                        var mcpDefs = McpManager.GetFilteredToolDefinitions(effectiveWhitelist);
-                        toolDefs.AddRange(mcpDefs);
-                    }
-
-                    Logger.Info($"[Agent:{Definition.Name}] 本轮携带 {toolDefs.Count} 个工具定义" +
-                        (toolWhitelist != null ? " (自定义白名单)" : ""));
+                    Logger.Info($"[Agent:{Definition.Name}] 本轮携带 {toolDefs.Count} 个工具定义(完整集)" +
+                        (toolWhitelist != null ? $", 白名单={effectiveWhitelist?.Count ?? 0}个" : ""));
                 }
 
                 // ── 流式调用 AI（带断点续传重试）──
@@ -832,19 +894,26 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
                     }
                 }
 
-                // ── 拦截非 Edit/非 Build Agent 的修改工具调用 ──
-                if (Definition.Type != AgentType.Edit && Definition.Type != AgentType.Build && toolCalls.Count > 0)
+                // ── 🔑 客户端白名单拦截：标记不在 effectiveWhitelist 中的工具调用 ──
+                //    因为 API 请求始终发送完整工具集（Prefix Cache 优化），
+                //    AI 可能调用不在当前 Agent/阶段白名单中的工具。
+                //    标记后统一在执行阶段返回拒绝消息，让 AI 重试正确工具。
+                HashSet<int>? blockedToolIndices = null;
+                if (toolCalls.Count > 0 && effectiveWhitelist != null && effectiveWhitelist.Count > 0)
                 {
-                    var modifyingTools = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                    var whitelistSet = new HashSet<string>(effectiveWhitelist, StringComparer.OrdinalIgnoreCase);
+                    blockedToolIndices = new HashSet<int>();
+                    for (int i = 0; i < toolCalls.Count; i++)
                     {
-                        "replace_string_in_file", "create_file", "create_directory", 
-                        "edit_notebook_file", "delete_file", "apply_patch", 
-                        "run_in_terminal", "write_file", "edit_file"
-                    };
-                    int removed = toolCalls.RemoveAll(tc => modifyingTools.Contains(tc.Function.Name));
-                    if (removed > 0)
+                        if (!whitelistSet.Contains(toolCalls[i].Function.Name))
+                        {
+                            blockedToolIndices.Add(i);
+                        }
+                    }
+                    if (blockedToolIndices.Count > 0)
                     {
-                        Logger.Warn($"[Agent:{Definition.Name}] 拦截了 {removed} 个被禁止的修改文件工具调用");
+                        var blockedNames = string.Join(", ", blockedToolIndices.Select(i => toolCalls[i].Function.Name));
+                        Logger.Warn($"[Agent:{Definition.Name}] 🚫 白名单拦截 {blockedToolIndices.Count} 个工具: {blockedNames}（白名单: {string.Join(", ", effectiveWhitelist)}）");
                     }
                 }
 
@@ -907,9 +976,22 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
                     }
 
                     // ── 并行执行工具调用（带超时保护，长时工具使用更长超时，已去重）──
+                    //    被白名单拦截的工具跳过执行，直接返回拒绝消息。
                     var toolTasks = dedupedIndices.Select(idx =>
                     {
                         var tc = toolCalls[idx];
+                        // ── 白名单拦截：不在白名单中的工具不执行，返回拒绝消息 ──
+                        if (blockedToolIndices != null && blockedToolIndices.Contains(idx))
+                        {
+                            string allowedList = effectiveWhitelist != null
+                                ? string.Join(", ", effectiveWhitelist)
+                                : "无";
+                            return Task.FromResult(
+                                $"🚫 工具 '{tc.Function.Name}' 在当前 Agent/阶段不可用。\n" +
+                                $"原因：该工具不在当前白名单中。\n" +
+                                $"当前可用工具: {allowedList}\n" +
+                                $"请使用可用工具重试，或考虑将任务移交给合适的 Agent。");
+                        }
                         var timeout = GetToolTimeout(tc.Function.Name);
                         return ExecuteToolWithTimeoutAsync(tc, workspaceRoot, ct, timeout);
                     }).ToList();
