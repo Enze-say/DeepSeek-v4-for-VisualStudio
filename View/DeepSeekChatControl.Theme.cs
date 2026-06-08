@@ -571,10 +571,16 @@ namespace DeepSeek_v4_for_VisualStudio.View
                 if (ChatWebView?.CoreWebView2 == null) return;
                 if (_messages.Count == 0) return;
 
+                // ── 重置页面就绪标志，等待新页面加载完成后再重建面板 ──
+                _pageReady = false;
+
                 // 重新生成完整 HTML 页面
                 string newHtml = ChatHtmlService.BuildInitialPage(_messages);
                 ChatWebView.CoreWebView2.NavigateToString(newHtml);
                 Logger.Info("[Theme] WebView2 reloaded with new theme");
+
+                // ── 页面刷新后重建持久化任务面板和 Handoff 按钮 ──
+                _ = RebuildPanelsWhenPageReadyAsync();
             }
             catch (Exception ex)
             {
