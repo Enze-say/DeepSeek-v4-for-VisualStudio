@@ -574,6 +574,10 @@ namespace DeepSeek_v4_for_VisualStudio.View
                 // ── 重置页面就绪标志，等待新页面加载完成后再重建面板 ──
                 _pageReady = false;
 
+                // ── 清除已创建面板 ID 缓存：NavigateToString 会清空 DOM，
+                // 重建时 _createdPlanIds 中残留的旧 ID 会阻止面板重新创建 ──
+                lock (_lock) { _createdPlanIds.Clear(); }
+
                 // 重新生成完整 HTML 页面
                 string newHtml = ChatHtmlService.BuildInitialPage(_messages);
                 ChatWebView.CoreWebView2.NavigateToString(newHtml);

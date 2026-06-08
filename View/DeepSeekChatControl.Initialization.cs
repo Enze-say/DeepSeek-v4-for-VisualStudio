@@ -831,10 +831,11 @@ namespace DeepSeek_v4_for_VisualStudio.View
                 RebuildMessagesHtml();
                 // ── 重置页面就绪标志，防止 RebuildPanelsWhenPageReadyAsync 使用旧页面状态 ──
                 // 若 _browserInitialized 为 false（如 OnSolutionClosed 后），UpdateBrowser 会做全量刷新
-                // 此时必须重置 _pageReady，确保面板重建等待新页面加载完成
+                // 此时必须重置 _pageReady 并清空 _createdPlanIds，确保面板重建等待新页面加载完成
                 if (!_browserInitialized)
                 {
                     _pageReady = false;
+                    lock (_lock) { _createdPlanIds.Clear(); }
                 }
                 UpdateBrowser();
                 // ── 重建持久化的任务面板 ──
