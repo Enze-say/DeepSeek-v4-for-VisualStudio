@@ -439,6 +439,26 @@ namespace DeepSeek_v4_for_VisualStudio.Services
                 .Where(m => !(m.Role == "assistant" && string.IsNullOrEmpty(m.Content) && (m.ToolCalls == null || m.ToolCalls.Count == 0)))
                 .ToList();
 
+            // ── 规则 6：移除孤立的 tool 消息（tool_call_id 找不到对应 assistant）──
+            // 场景：ExploreAgent 内部 tool 结果泄漏到主 ContextManager，但对应 assistant(tool_calls) 未写入，
+            // 导致 tool 消息的 tool_call_id 没有前置 assistant 声明 → DeepSeek API 返回 400。
+            var validToolCallIds = new HashSet<string>();
+            foreach (var m in request.Messages)
+            {
+                if (m.Role == "assistant" && m.ToolCalls != null)
+                {
+                    foreach (var tc in m.ToolCalls)
+                        if (!string.IsNullOrEmpty(tc.Id))
+                            validToolCallIds.Add(tc.Id);
+                }
+            }
+            int orphanToolCount = request.Messages.RemoveAll(m =>
+                m.Role == "tool" && !string.IsNullOrEmpty(m.ToolCallId) && !validToolCallIds.Contains(m.ToolCallId));
+            if (orphanToolCount > 0)
+            {
+                Logger.Warn($"[API] 移除 {orphanToolCount} 条孤立 tool 消息（tool_call_id 无匹配 assistant），避免 HTTP 400");
+            }
+
             // ── 预序列化请求体，供重试时复用 ──
             var requestJson = JsonSerializer.Serialize(request, new JsonSerializerOptions
             {
