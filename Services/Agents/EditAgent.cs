@@ -194,9 +194,16 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
             }
             else
             {
-                // ── 没有外部计划：根据 TaskSize 决定处理策略 ──
-                var taskSize = ClassifyTaskSize(userMessage);
+                // ── 使用首次路由时预分类的 TaskSize，避免对 handoff 长消息重复分类 ──
+                var taskSize = context.PreClassifiedTaskSize;
                 AddLog("INFO", string.Format(LocalizationService.Instance["agent.log.editTaskSize"], taskSize));
+
+                // ── 用户 @edit 显式指定时尊重用户意图，跳过自动移交 ──
+                if (taskSize == TaskSize.Large && context.IsExplicitRoute)
+                {
+                    AddLog("INFO", LocalizationService.Instance["agent.log.editExplicitRouteSkipHandoff"]);
+                    taskSize = TaskSize.Medium;
+                }
 
                 if (taskSize == TaskSize.Large)
                 {

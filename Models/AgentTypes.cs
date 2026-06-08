@@ -153,6 +153,10 @@ namespace DeepSeek_v4_for_VisualStudio.Models
         /// <summary>是否处于 Planning 模式（多步骤计划执行中）。为 true 时跳过每步编译，最后统一构建。</summary>
         public bool IsPlanningMode { get; set; }
 
+        /// <summary>首次路由时预分类的任务规模。EditAgent 应使用此值而非对 handoff 消息重复分类。</summary>
+        [JsonIgnore]
+        public TaskSize PreClassifiedTaskSize { get; set; } = TaskSize.Small;
+
         /// <summary>是否由用户 @agent 显式路由。为 true 时 Agent 不应主动移交控制权（除非必要的链式移交如 Plan→Edit）。</summary>
         public bool IsExplicitRoute { get; set; }
 

@@ -284,6 +284,7 @@ namespace DeepSeek_v4_for_VisualStudio.View
                     ConversationHistory = _contextManager.GetConversationHistory(),
                     ContextManager = _contextManager,
                     IsPlanningMode = routing?.NeedsPlanning == true || routing?.TargetAgent == AgentType.Plan,
+                    PreClassifiedTaskSize = routing?.TaskSize ?? TaskSize.Small,
                     IsExplicitRoute = routing?.IsExplicit == true,
                     CancellationToken = GetStreamingToken(),
                     ReadFileAsync = async (path) =>
