@@ -897,6 +897,15 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
                         ToolCalls = toolCalls
                     });
 
+                    // ── 同步 assistant 消息（含 tool_calls）到全局 ContextManager，确保重启后可恢复完整对话 ──
+                    if (Context?.ContextManager != null)
+                    {
+                        Context.ContextManager.AddAssistantMessage(
+                            contentBuilder.Length > 0 ? contentBuilder.ToString() : null,
+                            reasoningBuilder.Length > 0 ? reasoningBuilder.ToString() : null,
+                            toolCalls);
+                    }
+
                     // ── 并行执行工具调用（带超时保护，长时工具使用更长超时，已去重）──
                     var toolTasks = dedupedIndices.Select(idx =>
                     {
@@ -941,6 +950,12 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
                             ToolCallId = tc.Id,
                             Name = tc.Function.Name
                         });
+
+                        // ── 同步 tool 结果到全局 ContextManager，确保重启后可恢复完整对话 ──
+                        if (Context?.ContextManager != null)
+                        {
+                            Context.ContextManager.AddToolResult(tc.Id, tc.Function.Name, contextResult);
+                        }
 
                         Logger.Info($"[Agent:{Definition.Name}] 工具 {tc.Function.Name} 返回: {(toolResult.Length > 200 ? toolResult.Substring(0, 200) + "..." : toolResult)}");
                     }
