@@ -17,13 +17,19 @@ namespace DeepSeek_v4_for_VisualStudio.Services
 
         private static readonly object _lock = new();
         private static ThemeService? _instance;
+        private static volatile bool _initialized;
+
         public static ThemeService Instance
         {
             get
             {
                 lock (_lock)
                 {
-                    _instance ??= new ThemeService();
+                    if (_instance == null)
+                    {
+                        _instance = new ThemeService();
+                        Logger.Warn("[ThemeService] Instance lazy-created BEFORE Initialize() — VS theme cache will be unset until Initialize() runs");
+                    }
                     return _instance;
                 }
             }
@@ -31,14 +37,21 @@ namespace DeepSeek_v4_for_VisualStudio.Services
 
         /// <summary>
         /// 初始化单例（在 UI 线程调用，订阅 VS 主题变更事件）。
+        /// 幂等：即使 Instance 已被懒加载也会补做初始化。
         /// </summary>
         public static void Initialize()
         {
             lock (_lock)
             {
-                if (_instance != null) return;
-                _instance = new ThemeService();
-                _instance.SubscribeToVSThemeChanges();
+                if (_instance == null)
+                {
+                    _instance = new ThemeService();
+                }
+                if (!_initialized)
+                {
+                    _initialized = true;
+                    _instance.SubscribeToVSThemeChanges();
+                }
             }
         }
 
