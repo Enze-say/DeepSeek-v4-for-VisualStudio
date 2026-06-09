@@ -1269,15 +1269,16 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
         }
 
         /// <summary>
-        /// 记录跨所有工具调用轮次的累计 Cache 命中率到日志（Agent 内部版）。
-        /// 在所有轮次结束后调用，输出汇总总计。
+        /// 记录本次工作流的 Cache 命中率汇总到日志（与 UI 显示一致）。
+        /// 在所有轮次结束后调用，输出本次工作流（自上次 TakeCacheSnapshot 以来）的增量总计。
         /// </summary>
         private void LogTotalCacheHitRate(int finalRound)
         {
             try
             {
-                long totalHit = _apiService?.TotalCacheHitTokens ?? 0;
-                long totalMiss = _apiService?.TotalCacheMissTokens ?? 0;
+                var delta = _apiService?.GetCacheDelta() ?? (0, 0, 0, 0);
+                long totalHit = delta.Hit;
+                long totalMiss = delta.Miss;
                 long totalCacheable = totalHit + totalMiss;
                 if (totalCacheable == 0) return;
 
@@ -1285,12 +1286,12 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
                 string level = aggregateRate >= 0.95 ? "🟢" : aggregateRate >= 0.70 ? "🟡" : aggregateRate >= 0.30 ? "🟠" : "🔴";
 
                 Logger.Info($"[Cache] ═══════════════════════════════════════");
-                Logger.Info($"[Cache] {level} 累计汇总 ({finalRound} 轮)");
-                Logger.Info($"[Cache]   总 Cache 命中率: {aggregateRate * 100:F1}%");
-                Logger.Info($"[Cache]   累计命中: {totalHit:N0} tokens");
-                Logger.Info($"[Cache]   累计未命中: {totalMiss:N0} tokens");
-                Logger.Info($"[Cache]   累计 Prompt: {(_apiService?.TotalPromptTokens ?? 0):N0} tokens");
-                Logger.Info($"[Cache]   累计 Completion: {(_apiService?.TotalCompletionTokens ?? 0):N0} tokens");
+                Logger.Info($"[Cache] {level} 本次工作流汇总 ({finalRound} 轮)");
+                Logger.Info($"[Cache]   Cache 命中率: {aggregateRate * 100:F1}%");
+                Logger.Info($"[Cache]   命中: {totalHit:N0} tokens");
+                Logger.Info($"[Cache]   未命中: {totalMiss:N0} tokens");
+                Logger.Info($"[Cache]   Prompt: {delta.Prompt:N0} tokens");
+                Logger.Info($"[Cache]   Completion: {delta.Completion:N0} tokens");
                 Logger.Info($"[Cache] ═══════════════════════════════════════");
             }
             catch (Exception ex)
@@ -1300,25 +1301,24 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
         }
 
         /// <summary>
-        /// 生成累计 Cache 命中率摘要文本（用于附加到 AI 响应末尾，用户可见）。
+        /// 生成本次工作流 Cache 命中率摘要文本（用于附加到 AI 响应末尾，与 UI 一致）。
         /// </summary>
         private string GetTotalCacheHitSummary(int finalRound)
         {
             try
             {
-                long totalHit = _apiService?.TotalCacheHitTokens ?? 0;
-                long totalMiss = _apiService?.TotalCacheMissTokens ?? 0;
+                var delta = _apiService?.GetCacheDelta() ?? (0, 0, 0, 0);
+                long totalHit = delta.Hit;
+                long totalMiss = delta.Miss;
                 long totalCacheable = totalHit + totalMiss;
                 if (totalCacheable == 0) return string.Empty;
 
                 double rate = (double)totalHit / totalCacheable;
                 string icon = rate >= 0.95 ? "🟢" : rate >= 0.70 ? "🟡" : rate >= 0.30 ? "🟠" : "🔴";
-                long totalPrompt = _apiService?.TotalPromptTokens ?? 0;
-                long totalCompletion = _apiService?.TotalCompletionTokens ?? 0;
 
                 return $"\n\n---\n\n{icon} **Cache 命中率: {rate * 100:F1}%**" +
                     $" · {totalHit:N0} 命中 / {totalMiss:N0} 未命中" +
-                    $" · Prompt {totalPrompt:N0} · Completion {totalCompletion:N0}" +
+                    $" · Prompt {delta.Prompt:N0} · Completion {delta.Completion:N0}" +
                     (finalRound > 1 ? $" · {finalRound} 轮" : "");
             }
             catch
