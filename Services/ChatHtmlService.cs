@@ -738,13 +738,13 @@ namespace DeepSeek_v4_for_VisualStudio.Services
             sb.Append(reasoningHtml);
             sb.Append($"<div class='msg-content' id='msg-body-{idx}'>{bodyHtml}</div>");
             sb.Append(streamingCursor);
-            sb.Append(retryBtnHtml);
-            sb.Append(copyBtnHtml);
-            // ── 缓存命中率统计卡片（放在 msg-bubble 内部，紧跟消息内容下方）──
+            // ── 缓存命中率统计卡片（放在操作按钮之前，消息内容下方）──
             if (!string.IsNullOrEmpty(msg.CacheFooterHtml))
             {
                 sb.Append(msg.CacheFooterHtml);
             }
+            sb.Append(retryBtnHtml);
+            sb.Append(copyBtnHtml);
             sb.Append("</div>");  // closes msg-bubble
             sb.Append("</div>");  // closes msg-wrapper
         }
