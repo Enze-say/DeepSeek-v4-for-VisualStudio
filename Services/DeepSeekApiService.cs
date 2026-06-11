@@ -1,4 +1,4 @@
-﻿using DeepSeek_v4_for_VisualStudio.Models;
+using DeepSeek_v4_for_VisualStudio.Models;
 using DeepSeek_v4_for_VisualStudio.Utils;
 using System;
 using System.Collections.Generic;
@@ -744,10 +744,10 @@ namespace DeepSeek_v4_for_VisualStudio.Services
                     Logger.Info($"[Cache] {level} API调用完成: 命中率={rate * 100:F1}% (命中 {hit:N0} / 未命中 {miss:N0} / 可缓存 {cacheableTotal:N0} / prompt {LastUsage.PromptTokens:N0} tokens)\n" +
                         $"        ↳ 边界: {missBoundary}");
 
-                    // DumpRequestToDisk(requestJson, requestBodyBytes.Length,
-                    //     hit, miss, cacheableTotal, rate,
-                    //     request.Messages.Count, tools?.Count ?? 0);
-                }
+                        DumpRequestToDisk(requestJson, requestBodyBytes.Length,
+                            hit, miss, cacheableTotal, rate,
+                            request.Messages.Count, tools?.Count ?? 0);
+                    }
                 catch (Exception ex)
                 {
                     Logger.Warn($"[Cache] 缓存诊断输出异常: {ex.Message}");

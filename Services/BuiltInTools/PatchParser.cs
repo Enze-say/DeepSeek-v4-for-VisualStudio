@@ -109,27 +109,32 @@ namespace DeepSeek_v4_for_VisualStudio.Services.BuiltInTools
                         patch.Hunks.Add(currentHunk);
                     }
 
-                    if (line.StartsWith("- "))
+                    if (line.Length > 0 && line[0] == '-')
                     {
-                        string text = line.Substring(2);
+                        // ── 删除行：支持 "- " 和 "-text" 两种格式 ──
+                        string text = line.Substring(1).TrimStart();
                         currentHunk.RemoveLines.Add(text);
                         currentHunk.ContextLines.Add(text);
                         currentHunk.AllLines.Add(new PatchLine { Type = PatchLineType.Remove, Text = text });
                     }
-                    else if (line.StartsWith("+ "))
+                    else if (line.Length > 0 && line[0] == '+')
                     {
-                        string text = line.Substring(2);
+                        // ── 新增行：支持 "+ " 和 "+text" 两种格式 ──
+                        string text = line.Substring(1).TrimStart();
                         currentHunk.AddLines.Add(text);
                         currentHunk.AllLines.Add(new PatchLine { Type = PatchLineType.Add, Text = text });
                     }
-                    else if (line.Length > 0 && line[0] == ' ')
+                    else if (line.Length > 0 && (line[0] == ' ' || line[0] == '\t'))
                     {
+                        // ── 上下文行：支持空格和制表符前缀 ──
                         string text = line.Substring(1);
                         currentHunk.ContextLines.Add(text);
                         currentHunk.AllLines.Add(new PatchLine { Type = PatchLineType.Context, Text = text });
                     }
-                    else if (line.Length > 0 && line != "*** End Patch")
+                    else if (line.Length > 0 && !line.Equals("*** End Patch", StringComparison.OrdinalIgnoreCase))
                     {
+                        // ── FuzzMerge: 行缺少有效前缀（AI 偶尔漏写标记）──
+                        // 当作上下文行处理，确保 patch 不因格式小错而中断
                         currentHunk.ContextLines.Add(line);
                         currentHunk.AllLines.Add(new PatchLine { Type = PatchLineType.Context, Text = line });
                     }
