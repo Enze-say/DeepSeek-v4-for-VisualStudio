@@ -153,6 +153,7 @@ namespace DeepSeek_v4_for_VisualStudio.Services
             Register(new ReadFileTool(_fileReadCache));
             Register(new FileSearchTool());
             Register(new GrepSearchTool());
+            Register(new SymbolSearchTool());
             Register(new GetErrorsTool(_buildService));
             Register(new FetchWebpageTool(_webSearchService));
 
@@ -275,6 +276,7 @@ namespace DeepSeek_v4_for_VisualStudio.Services
                 new ReadFileTool(new ConcurrentDictionary<string, FileReadCacheEntry>()),
                 new FileSearchTool(),
                 new GrepSearchTool(),
+                new SymbolSearchTool(),
                 new GetErrorsTool(),
                 new FetchWebpageTool(),
                 new BuildSolutionTool(),
@@ -410,7 +412,7 @@ namespace DeepSeek_v4_for_VisualStudio.Services
         {
             return toolName switch
             {
-                "list_dir" or "read_file" or "file_search" or "grep_search" or "get_errors"
+                "list_dir" or "read_file" or "file_search" or "grep_search" or "symbol_search" or "get_errors"
                     or "fetch_webpage" or "build_solution"
                     or "replace_string_in_file" or "multi_replace_string_in_file" or "create_file" or "delete_file"
                     or "apply_patch" or "create_directory"
