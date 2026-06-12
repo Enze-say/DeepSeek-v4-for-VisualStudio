@@ -16,11 +16,8 @@ namespace DeepSeek_v4_for_VisualStudio.Services.BuiltInTools
     /// </summary>
     public class GrepSearchTool : BuiltInToolBase
     {
-        private static readonly HashSet<string> ExcludeDirs = new(StringComparer.OrdinalIgnoreCase)
-        {
-            "node_modules", ".git", "bin", "obj", "packages", ".vs", "Debug", "Release",
-            "__pycache__", ".venv", "venv", "dist", "build", ".next", ".nuget"
-        };
+        /// <summary>排除目录（引用 SharedConstants）</summary>
+        private static readonly HashSet<string> ExcludeDirs = SharedConstants.ExcludedDirectories;
 
         public override string Name => "grep_search";
 

@@ -256,8 +256,7 @@ namespace DeepSeek_v4_for_VisualStudio.Services.BuiltInTools
             var results = new List<(string FullName, string DisplayName, string ProjectName, string FileName, int LineNumber)>();
 
             // ── 只搜索源代码文件 ──
-            var sourceExts = new[] { ".cs", ".vb", ".cpp", ".h", ".hpp", ".c", ".fs", ".fsx",
-                ".py", ".js", ".ts", ".jsx", ".tsx", ".java", ".go", ".rs", ".swift", ".kt" };
+            var sourceExts = SharedConstants.SourceFileExtensions.ToArray();
 
             // ── 符号定义正则（C# 优先，通用兜底）──
             // 匹配: class/interface/struct/enum/record Name, method/property/field definitions

@@ -932,16 +932,15 @@ namespace DeepSeek_v4_for_VisualStudio.Services
             return $"<pre><code class=\"language-mermaid\">{escaped}</code></pre>";
         }
 
-        // 常见源代码文件扩展名
-        private static readonly HashSet<string> SourceFileExtensions = new(StringComparer.OrdinalIgnoreCase)
+        // 可点击导航的文件扩展名（源代码 + 文档/解决方案文件）
+        private static readonly HashSet<string> SourceFileExtensions;
+
+        static ChatHtmlService()
         {
-            ".cs", ".vb", ".cpp", ".c", ".h", ".hpp", ".fs", ".fsx",
-            ".py", ".js", ".ts", ".jsx", ".tsx", ".java", ".go", ".rs",
-            ".swift", ".kt", ".php", ".rb", ".lua", ".sql",
-            ".xml", ".xaml", ".json", ".yaml", ".yml", ".md", ".txt",
-            ".csproj", ".vbproj", ".sln", ".slnx", ".config", ".css",
-            ".html", ".htm", ".razor", ".cshtml", ".vbhtml",
-        };
+            SourceFileExtensions = new HashSet<string>(SharedConstants.SourceFileExtensions, StringComparer.OrdinalIgnoreCase);
+            foreach (var ext in SharedConstants.DocFileExtensions)
+                SourceFileExtensions.Add(ext);
+        }
 
         // PascalCase 标识符模式（类名/方法名/属性名）
         private static readonly Regex PascalCasePattern = new(

@@ -402,17 +402,9 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
         #region Solution Discovery
 
         /// <summary>
-        /// 可自动发现的源代码文件扩展名集合。
+        /// 可自动发现的源代码文件扩展名集合（引用 SharedConstants）。
         /// </summary>
-        private static readonly HashSet<string> SourceFileExtensions = new(StringComparer.OrdinalIgnoreCase)
-        {
-            ".cs", ".vb", ".cpp", ".c", ".h", ".hpp", ".fs", ".fsx",
-            ".xaml", ".xml", ".json", ".config", ".csproj", ".vbproj",
-            ".py", ".js", ".ts", ".jsx", ".tsx", ".css", ".scss", ".less",
-            ".html", ".htm", ".razor", ".cshtml", ".vbhtml",
-            ".sql", ".md", ".txt", ".yml", ".yaml", ".ps1", ".psm1",
-            ".go", ".rs", ".java", ".kt", ".swift", ".proto",
-        };
+        private static readonly HashSet<string> SourceFileExtensions = SharedConstants.SourceFileExtensions;
 
         /// <summary>
         /// 自动发现解决方案中的源代码文件。
@@ -491,11 +483,7 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
                     {
                         AddLog("INFO", $"[Discover] DTE 未发现文件，回退到目录扫描: {workspaceDir}");
 
-                        var excludeDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-                        {
-                            "bin", "obj", ".git", ".vs", "node_modules", "packages",
-                            "Debug", "Release", "out", ".github",
-                        };
+                        var excludeDirs = SharedConstants.ExcludedDirectories;
 
                         await Task.Run(() =>
                         {

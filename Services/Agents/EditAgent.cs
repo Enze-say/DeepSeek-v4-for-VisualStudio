@@ -3111,11 +3111,7 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
                     ".sln", ".md",
                 };
 
-                var excludeDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-                {
-                    "bin", "obj", ".git", ".vs", "node_modules", "packages",
-                    "Debug", "Release",
-                };
+                var excludeDirs = SharedConstants.ExcludedDirectories;
 
                 files = await Task.Run(() =>
                     Directory.GetFiles(solutionPath, "*.*", SearchOption.AllDirectories)

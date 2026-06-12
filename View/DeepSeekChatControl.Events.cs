@@ -1687,7 +1687,9 @@ namespace DeepSeek_v4_for_VisualStudio.View
                     : slnPath;
 
                 // 在源码文件中搜索符号定义
-                var sourceExts = new[] { ".cs", ".vb", ".cpp", ".h", ".hpp", ".fs", ".fsx" };
+                var sourceExts = SharedConstants.SourceFileExtensions
+                    .Where(e => e.StartsWith("."))
+                    .ToArray();
                 var definitionPatterns = new[]
                 {
                     $@"\b(class|interface|struct|enum|record|delegate)\s+{Regex.Escape(symbolName)}\b",
