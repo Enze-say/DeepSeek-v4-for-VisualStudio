@@ -203,7 +203,7 @@ namespace DeepSeek_v4_for_VisualStudio.Services
             }
 
             sb.AppendLine("=== 搜索结果结束 ===");
-            sb.AppendLine("请基于以上联网搜索结果回答用户的问题。如果搜索结果不相关或不足以回答问题，请如实告知用户。");
+            sb.AppendLine(AiPrompts.WebSearchContextInstruction);
             return sb.ToString();
         }
 
@@ -424,7 +424,7 @@ namespace DeepSeek_v4_for_VisualStudio.Services
             header.AppendLine();
             header.Append(sb.ToString());
             header.AppendLine("=== 链接内容结束 ===");
-            header.AppendLine("请基于以上链接内容，结合用户的问题进行回答。");
+            header.AppendLine(AiPrompts.WebFetchContextInstruction);
 
             return header.ToString();
         }

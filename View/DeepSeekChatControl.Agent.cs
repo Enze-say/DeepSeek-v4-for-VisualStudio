@@ -883,24 +883,10 @@ namespace DeepSeek_v4_for_VisualStudio.View
             {
                 // ── 构建轻量级记忆判断提示 ──
                 // 遵循 DeepSeek JSON Output 规范：prompt 中必须含 "json" 字样 + JSON 样例
-                var systemPrompt = "你是一个记忆管理助手。根据一轮对话（用户问题 + AI回答），判断是否有值得持久化记忆的信息，并以 JSON 格式输出。\n\n"
-                    + "记忆作用域：\n"
-                    + "- user — 用户记忆：跨所有工作区持久化，存储用户偏好、编码习惯、常用命令等\n"
-                    + "- session — 会话记忆：当前对话内有效，存储临时上下文和进行中笔记\n"
-                    + "- repo — 仓库记忆：当前解决方案内有效，存储项目约定、构建命令、架构决策等\n\n"
-                    + "判断标准：\n"
-                    + "- 用户表达了明确的编码偏好或习惯 → 记录到 user 作用域\n"
-                    + "- 发现项目特定的构建命令、架构约定 → 记录到 repo 作用域\n"
-                    + "- 对话中做出了重要的技术决策 → 记录到 repo 作用域\n"
-                    + "- 用户纠正了 AI 的错误 → 记录到 user 作用域\n"
-                    + "- 如果是普通问答、代码解释、简单修改请求 → 输出空数组 []\n\n"
-                    + "JSON 输出格式（严格遵守，不要包含任何其他文本）：\n"
-                    + "需要记录时输出 json 数组，每个元素含 scope/user/session/repo、path/文件名.md、content/markdown内容：\n"
-                    + "[{\"scope\":\"user\",\"path\":\"preferences.md\",\"content\":\"用户偏好使用 var 而非显式类型声明\"}]\n"
-                    + "不需要记录时输出：\n"
-                    + "[]";
+                var systemPrompt = AiPrompts.MemoryAutoRecordSystemPrompt;
 
-                var userPrompt = $"## 用户消息\n{userMessage.Truncate(2000)}\n\n## AI 回答摘要\n{assistantResponse.Truncate(2000)}\n\n请以 JSON 数组格式输出判断结果。";
+                var userPrompt = string.Format(AiPrompts.MemoryAutoRecordUserPrompt,
+                    userMessage.Truncate(2000), assistantResponse.Truncate(2000));
 
                 var messages = new List<ChatApiMessage>
                 {

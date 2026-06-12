@@ -249,31 +249,8 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
         /// </summary>
         private static string BuildAutoSplitPrompt(string userMessage)
         {
-            var sb = new StringBuilder();
-            sb.AppendLine("你是一个代码修改步骤规划器。请分析以下用户请求，将其分解为可独立执行的步骤。");
-            sb.AppendLine();
-            sb.AppendLine("## 规划规则");
-            sb.AppendLine("- 每个步骤应该是可以独立完成的代码修改操作");
-            sb.AppendLine($"- 每个步骤最多修改 {MaxFilesPerEdit} 个文件，不超过 {MaxLinesPerEdit} 行代码");
-            sb.AppendLine("- 步骤数量不超过 5 个（如果是简单任务，1-2 步即可）");
-            sb.AppendLine("- 如果任务非常简单（单文件、少量修改），返回单步骤即可");
-            sb.AppendLine("- 步骤之间应尽量减少依赖，便于独立执行和验证");
-            sb.AppendLine();
-            sb.AppendLine("## 输出格式");
-            sb.AppendLine("只返回 JSON 数组，每个元素包含 index（步骤序号从1开始）、title（简短标题）、description（详细描述）。");
-            sb.AppendLine("不要包含任何其他文本或 markdown 包裹。");
-            sb.AppendLine();
-            sb.AppendLine("## 示例输出");
-            sb.AppendLine("[{\"index\":1,\"title\":\"修改 UserService 接口\",\"description\":\"在 IUserService 中添加 GetByIdAsync 方法签名\"},");
-            sb.AppendLine("{\"index\":2,\"title\":\"实现 UserService\",\"description\":\"在 UserService.cs 中实现 GetByIdAsync 方法\"},");
-            sb.AppendLine("{\"index\":3,\"title\":\"更新调用方\",\"description\":\"在 UserController.cs 中调用新的 GetByIdAsync 方法\"}]");
-            sb.AppendLine();
-            sb.AppendLine("## 用户请求");
-            sb.AppendLine(userMessage);
-            sb.AppendLine();
-            sb.AppendLine("请输出步骤规划 JSON：");
-
-            return sb.ToString();
+            return string.Format(AiPrompts.AutoSplitSystemPrompt,
+                MaxFilesPerEdit, MaxLinesPerEdit, userMessage);
         }
 
         /// <summary>

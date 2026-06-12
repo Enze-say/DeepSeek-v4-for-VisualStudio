@@ -497,26 +497,12 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
                     new ChatApiMessage
                     {
                         Role = "system",
-                        Content = "你是一个代码变更总结助手。请基于下方结构化摘要，生成一段面向用户的变更总结（3-5句话）。\n\n" +
-                            "核心要求：\n" +
-                            "1. 聚焦「完成了什么」——实现了什么功能、修复了什么问题、做了什么优化\n" +
-                            "2. 不要罗列修改了哪些文件、增删了多少行代码——这些是技术细节，不是用户关心的\n" +
-                            "3. 使用用户视角的语言，描述本次变更对项目的影响和价值\n" +
-                            "4. 如果变更涉及多个方面，按重要性排列\n" +
-                            "5. 保持客观描述，不评价代码质量\n\n" +
-                            "反面示例（不要这样写）：\n" +
-                            "- 「修改了 Services/FooService.cs，新增 150 行，删除 80 行」\n" +
-                            "- 「在 BarController.cs 和 BazHelper.cs 中做了改动」\n\n" +
-                            "正面示例（应该这样写）：\n" +
-                            "- 「实现了用户登录功能，支持 JWT 令牌认证和刷新机制」\n" +
-                            "- 「修复了并发请求导致的数据竞争问题，添加了线程安全保护」\n" +
-                            "- 「重构了缓存模块，将命中率从 60% 提升到 92%」\n\n" +
-                            "只输出润色后的文本，不添加任何额外说明。"
+                        Content = AiPrompts.SummaryPolishSystemPrompt
                     },
                     new ChatApiMessage
                     {
                         Role = "user",
-                        Content = $"请润色以下代码变更摘要为自然语言：\n\n{directSummary}"
+                        Content = string.Format(AiPrompts.SummaryPolishUserPrompt, directSummary)
                     }
                 };
 

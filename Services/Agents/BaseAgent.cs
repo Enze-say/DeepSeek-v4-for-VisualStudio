@@ -1758,9 +1758,7 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
                     {
                         AddLog("WARN", LocalizationService.Instance.Format("agent.log.permissionDenied", targetPath));
                         return $"⛔ 用户拒绝了项目外路径{operation}: {targetPath}\n\n"
-                            + $"⚠️ 重要提醒：用户已明确拒绝访问此项目外路径。\n"
-                            + $"请绝对不要再尝试访问 `{targetPath}` 或其父目录下的任何文件。\n"
-                            + $"请基于当前工作区 `{workspaceRoot}` 内的文件完成任务。";
+                            + string.Format(AiPrompts.OutOfWorkspaceWarning, targetPath, workspaceRoot);
                     }
                     AddLog("INFO", LocalizationService.Instance.Format("agent.log.permissionGranted", targetPath));
                 }

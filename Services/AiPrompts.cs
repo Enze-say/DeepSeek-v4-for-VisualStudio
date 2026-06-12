@@ -189,6 +189,34 @@ namespace DeepSeek_v4_for_VisualStudio.Services
 
         #endregion
 
+        #region AI Sub-prompts (summary polish, memory, auto-split, web search, workspace warning)
+
+        /// <summary>摘要润色 — 系统提示词</summary>
+        public static string SummaryPolishSystemPrompt => L["system.aiPrompt.summaryPolishSystem"];
+
+        /// <summary>摘要润色 — 用户提示词模板。{0}=directSummary</summary>
+        public static string SummaryPolishUserPrompt => L["system.aiPrompt.summaryPolishUser"];
+
+        /// <summary>自动记忆记录 — 系统提示词</summary>
+        public static string MemoryAutoRecordSystemPrompt => L["system.aiPrompt.memoryAutoRecordSystem"];
+
+        /// <summary>自动记忆记录 — 用户提示词模板。{0}=userMessage, {1}=assistantResponse</summary>
+        public static string MemoryAutoRecordUserPrompt => L["system.aiPrompt.memoryAutoRecordUser"];
+
+        /// <summary>步骤自动拆分 — 系统提示词。{0}=maxFiles, {1}=maxLines, {2}=userMessage</summary>
+        public static string AutoSplitSystemPrompt => L["system.aiPrompt.autoSplitSystem"];
+
+        /// <summary>联网搜索上下文指令</summary>
+        public static string WebSearchContextInstruction => L["system.aiPrompt.webSearchContext"];
+
+        /// <summary>网页抓取上下文指令</summary>
+        public static string WebFetchContextInstruction => L["system.aiPrompt.webFetchContext"];
+
+        /// <summary>项目外路径拒绝警告。{0}=targetPath, {1}=workspaceRoot</summary>
+        public static string OutOfWorkspaceWarning => L["system.aiPrompt.outOfWorkspaceWarning"];
+
+        #endregion
+
         #region Plan Agent Prompts
 
         /// <summary>
