@@ -567,19 +567,18 @@ namespace DeepSeek_v4_for_VisualStudio.Services
         /// 构建发送给 DeepSeek API 的完整消息列表。
         /// 正确处理 reasoning_content 回传规则。
         /// 
-        /// ── 前缀缓存优化（v1.1.10）──
-        /// 消息结构遵循"共享不可变前缀 + 对话历史 + Agent 专属块 + 动态块"四层模型：
+        /// ── 前缀缓存优化（v1.1.11）──
+        /// 消息结构遵循"共享不可变前缀 + FP + DB + 对话历史"固定前缀模型：
         ///   messages[0] = AiPrompts.SharedImmutablePrefix（跨 Agent 完全一致）
-        ///   messages[1..N-1] = 对话历史（仅追加，不修改）→ 前缀缓存可覆盖到此
-        ///   messages[N] = Agent 专属系统提示词（_fixedSystemPrompt，放在历史之后）
-        ///   messages[N+1] = 动态上下文块（压缩摘要 + 搜索 + RAG + 记忆）
-        ///   messages[N+2] = 用户消息（调用方追加）
+        ///   messages[1] = _fixedSystemPrompt（Agent 专属系统提示词，固定位置）
+        ///   messages[2] = 动态上下文块（压缩摘要 + 搜索 + RAG + 记忆，固定位置）
+        ///   messages[3..] = 对话历史（仅追加，不修改）→ 前缀缓存可覆盖到此
         /// 
-        /// 关键改动（v1.1.10）：messages[0] 使用 AiPrompts.SharedImmutablePrefix 而非
-        /// _fixedSystemPrompt。前者跨所有 Agent 完全一致，后者包含 Agent 专属指令。
-        /// 将 Agent 专属指令从 messages[0] 移到对话历史之后，消除跨 Agent 切换时的
-        /// 前缀漂移（Prefix Drift），使 DeepSeek V4 自动前缀缓存在 Agent 切换后
-        /// 仍能命中 messages[0] 到对话历史末尾的整个前缀。
+        /// 关键改动（v1.1.11）：FP 和 DB 从历史末尾移到 messages[1][2] 固定位置。
+        ///   v1.1.10 将它们放在历史之后，导致历史增长时位置不断后移，cache key 漂移。
+        ///   现在 [0][1][2] 三位置永远固定，只有 [3..] 的对话历史会增长。
+        ///   BaseAgent.BuildContextAwareMessages() 在 [3..] 末尾额外追加 Agent 行为指令
+        ///   和用户消息，但不影响 [0..2] 的前缀稳定性。
         /// 
         /// 此结构与 BaseAgent.BuildContextAwareMessages() 的 messages[0] 保持一致，
         /// 两者都使用 AiPrompts.SharedImmutablePrefix。
@@ -871,8 +870,7 @@ namespace DeepSeek_v4_for_VisualStudio.Services
         /// <summary>
         /// 构建仅包含最近 N 轮的 API 消息列表（用于 Agent 子调用）。
         /// 以 user 消息为轮次边界，保留完整的 tool 调用链。
-        /// 前缀结构同 BuildApiMessages()：messages[0] = SharedImmutablePrefix，
-        /// Agent 专属提示词和动态块放在对话历史之后。
+        /// 前缀结构同 BuildApiMessages()：[0]=SP, [1]=FP, [2]=DB, [3..]=entries。
         /// </summary>
         /// <param name="maxTurns">保留的最大轮次数</param>
         public List<ChatApiMessage> BuildApiMessagesRecentTurns(int maxTurns)
