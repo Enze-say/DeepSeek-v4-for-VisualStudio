@@ -197,6 +197,40 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
                         AddLog("WARN", string.Format(L["agent.log.planMdGenFailed"], ex.Message));
                     }
 
+                    // ── 将 Phase 3 设计阶段的对话历史同步到 ContextManager ──
+                    // Phase 1(发现) 和 Phase 2(对齐) 通过工具循环已写入 CM，
+                    // 但 Phase 3(JSON 设计) 使用 CallAiWithMessagesAsync 不写 CM。
+                    // EditAgent 接手时通过 BuildContextAwareMessages 可看到完整计划生成上下文。
+                    if (designMessages != null && designMessages.Count > 0 && context.ContextManager != null)
+                    {
+                        int phase12Count = alignmentMessages?.Count ?? 0;
+                        if (phase12Count > 0 && designMessages.Count > phase12Count)
+                        {
+                            int added = 0;
+                            for (int i = phase12Count; i < designMessages.Count; i++)
+                            {
+                                var msg = designMessages[i];
+                                if (msg.Role == "user" && !string.IsNullOrEmpty(msg.Content))
+                                {
+                                    context.ContextManager.AddUserMessage(msg.Content!);
+                                    added++;
+                                }
+                                else if (msg.Role == "assistant" && !string.IsNullOrEmpty(msg.Content))
+                                {
+                                    context.ContextManager.AddAssistantMessage(msg.Content!, msg.ReasoningContent);
+                                    added++;
+                                }
+                                else if (msg.Role == "system" && !string.IsNullOrEmpty(msg.Content))
+                                {
+                                    context.ContextManager.AddCustomMessage("system", msg.Content!);
+                                    added++;
+                                }
+                            }
+                            if (added > 0)
+                                AddLog("INFO", $"[Plan] Phase 3 设计对话已同步到 ContextManager ({added} 条消息)");
+                        }
+                    }
+
                     // ── 设置 Handoff：计划完成后自动建议切换到 Edit Agent 执行 ──
                     result.Handoff = new AgentHandoff
                     {
