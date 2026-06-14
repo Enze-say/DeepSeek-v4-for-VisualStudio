@@ -648,8 +648,10 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
             var toolCallHistory = new List<(int Round, string Summary)>();
             var lastResultBySignature = new Dictionary<string, string>();  // 跟踪每次调用的结果
             int consecutiveErrorRounds = 0;
-            const int maxRepeatedSameCall = 5;    // 同一调用最多重复 5 次
-            const int maxConsecutiveErrors = 5;
+            int maxRepeatedSameCall = Settings.DeepSeekOptionsPage.Instance?.MaxRepeatedSameCall ?? 5;
+            if (maxRepeatedSameCall < 1) maxRepeatedSameCall = 5;
+            int maxConsecutiveErrors = Settings.DeepSeekOptionsPage.Instance?.MaxConsecutiveErrors ?? 5;
+            if (maxConsecutiveErrors < 1) maxConsecutiveErrors = 5;
             int safetyLimit = Settings.DeepSeekOptionsPage.Instance?.MaxToolCallRounds ?? 200;
             if (safetyLimit < 1) safetyLimit = 200;
             bool loopDetected = false;

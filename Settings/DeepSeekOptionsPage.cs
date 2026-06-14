@@ -237,6 +237,18 @@ namespace DeepSeek_v4_for_VisualStudio.Settings
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
         public int MaxToolCallRounds { get; set; } = 200;
 
+        [LocalizedCategory("settings.category.agent")]
+        [LocalizedDisplayName("settings.maxRepeatedSameCall.displayName")]
+        [LocalizedDescription("settings.maxRepeatedSameCall.description")]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
+        public int MaxRepeatedSameCall { get; set; } = 5;
+
+        [LocalizedCategory("settings.category.agent")]
+        [LocalizedDisplayName("settings.maxConsecutiveErrors.displayName")]
+        [LocalizedDescription("settings.maxConsecutiveErrors.description")]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Visible)]
+        public int MaxConsecutiveErrors { get; set; } = 5;
+
         // ═══════════════════════════════════════════════
         //  审批模式设置
         // ═══════════════════════════════════════════════
