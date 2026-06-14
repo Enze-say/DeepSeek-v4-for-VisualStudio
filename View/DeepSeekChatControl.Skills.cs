@@ -479,11 +479,9 @@ user-invocable: true
                     skillsSummary = SkillService.Instance.GetSkillsSummary();
                 }
 
-                if (string.IsNullOrEmpty(skillsSummary) || _apiService == null)
+                if (string.IsNullOrEmpty(skillsSummary) || _activeAgent == null)
                     return null;
 
-                // RAG-MARK: no-truncate — 不再截断用户内容，完整传递给技能路由判断
-                // RAG-SOURCE: user-message 用户消息内容（用于技能路由）
                 string truncatedContent = fullUserContent;
 
                 string routingUserPrompt = string.Format(
@@ -504,7 +502,7 @@ user-invocable: true
                 try
                 {
                     var cts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
-                    routingResponse = await _apiService.CompleteAsync(routingMessages, cts.Token, responseFormat: "json_object");
+                    routingResponse = await _activeAgent.CallAiWithMessagesAsync(routingMessages, cts.Token, responseFormat: "json_object");
                     routingResponse = routingResponse?.Trim();
                 }
                 catch (OperationCanceledException)

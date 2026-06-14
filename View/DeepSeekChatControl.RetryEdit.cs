@@ -1199,175 +1199,38 @@ namespace DeepSeek_v4_for_VisualStudio.View
                         routing = new AgentRoutingResult { TargetAgent = AgentType.Ask, Confidence = "high", Reason = "重试默认 AskAgent", NeedsPlanning = false };
                     }
 
-                    bool needsAgent = routing.TargetAgent != AgentType.Ask
-                        || routing.NeedsPlanning;
+                    // ── 统一通过 Agent 路径重试（移除旧的 needsAgent 分支）──
+                    Logger.Info($"[Retry] 重新路由到 Agent: {routing.TargetAgent}" +
+                        $", NeedsPlanning={routing.NeedsPlanning}");
 
-                    if (needsAgent)
+                    string fileContext = string.Empty;
+                    if (userMsg.AttachedFiles.Count > 0)
+                        fileContext = FileParserService.FormatParseResultsForContext(userMsg.AttachedFiles);
+
+                    string conversationContext = GetConversationContextForRetry();
+                    if (!string.IsNullOrEmpty(conversationContext))
                     {
-                        Logger.Info($"[Retry] 重新路由到 Agent: {routing.TargetAgent}" +
-                            $", NeedsPlanning={routing.NeedsPlanning}");
-
-                        string fileContext = string.Empty;
-                        if (userMsg.AttachedFiles.Count > 0)
-                            fileContext = FileParserService.FormatParseResultsForContext(userMsg.AttachedFiles);
-
-                        string conversationContext = GetConversationContextForRetry();
-                        if (!string.IsNullOrEmpty(conversationContext))
-                        {
-                            fileContext = string.IsNullOrEmpty(fileContext)
-                                ? conversationContext
-                                : conversationContext + "\n\n" + fileContext;
-                        }
-
-                        // ── 检查是否已有 retry fork 占位 assistant，避免创建多余气泡 ──
-                        bool hasPlaceholder = TryReuseRetryPlaceholder(out assistantMsg, out newAssistantIdx);
-
-                        await RunAgentWorkflowAsync(enrichedContent, fileContext, routing);
-                        RecordAgentFileChanges(userMsgIndex);
-
-                        // ── RunAgentWorkflowAsync 已处理所有渲染（任务面板 + Handoff 按钮），
-                        // 无需再次全量重建页面（会清除动态注入的 JS 元素）──
-
-                        lock (_lock) { _isGenerating = false; }
-                        UpdateButtonsState();
-                        StatusLabel.Text = LocalizationService.Instance["status.ready"];
-                        return;
+                        fileContext = string.IsNullOrEmpty(fileContext)
+                            ? conversationContext
+                            : conversationContext + "\n\n" + fileContext;
                     }
+
+                    TryReuseRetryPlaceholder(out assistantMsg, out newAssistantIdx);
+
+                    await RunAgentWorkflowAsync(enrichedContent, fileContext, routing);
+                    RecordAgentFileChanges(userMsgIndex);
+
+                    lock (_lock) { _isGenerating = false; }
+                    UpdateButtonsState();
+                    StatusLabel.Text = LocalizationService.Instance["status.ready"];
+                    return;
                 }
 
-                // ── 检查是否已有 retry fork 占位 assistant（非 Agent 路径），避免创建多余气泡 ──
-                bool reusedPlaceholder = TryReuseRetryPlaceholder(out assistantMsg, out newAssistantIdx);
-
-                if (!reusedPlaceholder)
-                {
-                    assistantMsg = new ChatMessage
-                    {
-                        Role = "assistant",
-                        Content = string.Empty,
-                        ReasoningContent = string.Empty,
-                        Timestamp = DateTime.Now,
-                        IsStreaming = true,
-                        IsRendered = false,
-                    };
-                    lock (_lock)
-                    {
-                        // ── 树状结构：通过 AddChildMessage 添加到活跃分支 ──
-                        if (_tree != null)
-                        {
-                            _tree.AddChildMessage(assistantMsg);
-                            SyncMessagesFromTree();
-                            newAssistantIdx = _messages.Count - 1;
-                        }
-                        else
-                        {
-                            _messages.Add(assistantMsg);
-                            newAssistantIdx = _messages.Count - 1;
-                        }
-                    }
-                }
-
-                RebuildMessagesHtml();
-                _browserInitialized = false;
-                UpdateBrowser();
-
-                var requestMessages = await BuildRequestMessagesAsync();
-                var apiService = _apiService!;
-
-                var reasoningBuffer = new StringBuilder();
-                var contentBuffer = new StringBuilder();
-                int streamRenderTick = 0;
-                int lastReasoningLength = 0;
-
-                await foreach (var chunk in apiService.ChatStreamAsync(requestMessages, null, retryCts.Token))
-                {
-                    if (chunk.StartsWith("[THINKING]"))
-                    {
-                        var thinking = chunk.Substring(10);
-                        reasoningBuffer.Append(thinking);
-                        StatusLabel.Text = LocalizationService.Instance["status.deepThinking"];
-
-                        if (reasoningBuffer.Length - lastReasoningLength >= 200)
-                        {
-                            assistantMsg.ReasoningContent = reasoningBuffer.ToString();
-                            lastReasoningLength = reasoningBuffer.Length;
-                            BatchStreamingUpdate(newAssistantIdx,
-                                contentBuffer.ToString(), reasoningBuffer.ToString());
-                        }
-                    }
-                    else if (chunk.StartsWith("[TOOL_CALL]"))
-                    {
-                        // Retry 场景不使用工具调用，忽略
-                    }
-                    else if (chunk.StartsWith("[CACHE]"))
-                    {
-                        // ── Cache 统计信息 ── 日志在流结束后统一记录
-                    }
-                    else
-                    {
-                        if (reasoningBuffer.Length > 0 && lastReasoningLength < reasoningBuffer.Length)
-                        {
-                            assistantMsg.ReasoningContent = reasoningBuffer.ToString();
-                            lastReasoningLength = reasoningBuffer.Length;
-                        }
-
-                        contentBuffer.Append(chunk);
-                        streamRenderTick += chunk.Length;
-                        StatusLabel.Text = LocalizationService.Instance["status.replying"];
-
-                        if (streamRenderTick >= StreamRenderInterval)
-                        {
-                            streamRenderTick = 0;
-                            assistantMsg.Content = contentBuffer.ToString();
-                            BatchStreamingUpdate(newAssistantIdx,
-                                contentBuffer.ToString(), reasoningBuffer.ToString());
-                        }
-                    }
-                }
-
-                assistantMsg.ReasoningContent = reasoningBuffer.ToString();
-                assistantMsg.Content = contentBuffer.ToString();
-                assistantMsg.IsStreaming = false;
-
-                Logger.Info($"[Retry] 流式结束: 内容长度={contentBuffer.Length}, 思考长度={reasoningBuffer.Length}");
-
-                // ── 记录 Cache 命中率 ──
-                LogCacheHitRate();
-
-                // ── 构建 Cache 命中率统计卡片 HTML（本次重试增量）──
-                string cacheFooterHtml = string.Empty;
-                {
-                    var delta = _apiService?.GetCacheDelta() ?? (0, 0, 0, 0);
-                    if (delta.Hit + delta.Miss > 0)
-                    {
-                        cacheFooterHtml = ChatHtmlService.BuildCacheHitFooterHtml(
-                            delta.Hit, delta.Miss, delta.Prompt, delta.Completion, roundCount: 1);
-                        // ── 持久化到 ChatMessage，重启后可恢复显示 ──
-                        lock (_lock) { if (newAssistantIdx >= 0 && newAssistantIdx < _messages.Count) _messages[newAssistantIdx].CacheFooterHtml = cacheFooterHtml; }
-                    }
-                }
-
-                // ── 同步最终内容并强制刷新，确保增量内容已推送 ──
-                BatchStreamingUpdate(newAssistantIdx, contentBuffer.ToString(), reasoningBuffer.ToString(), isComplete: true);
-
-                PostStreamEnd(newAssistantIdx, contentBuffer.ToString(), reasoningBuffer.ToString(), cacheFooterHtml);
-
-                _contextManager.AddAssistantMessage(
-                    contentBuffer.ToString(),
-                    reasoningBuffer.Length > 0 ? reasoningBuffer.ToString() : null);
-
-                // ── 树状结构：不再需要版本历史字典 ──
-
-                RebuildMessagesHtml();
-                _browserInitialized = false;
-                UpdateBrowser();
-
-                var capturedMsg = assistantMsg;
-                _ = Task.Run(() =>
-                {
-                    capturedMsg.HtmlContent = "rendered";
-                    capturedMsg.IsRendered = true;
-                    SaveCurrentSession();
-                });
+                // ── Agent 系统不可用时拒绝重试，避免静默回退到已移除的非 Agent 路径 ──
+                Logger.Error("[Retry] Agent 系统未初始化，无法重试");
+                lock (_lock) { _isGenerating = false; }
+                UpdateButtonsState();
+                StatusLabel.Text = LocalizationService.Instance["status.ready"];
             }
             catch (OperationCanceledException)
             {

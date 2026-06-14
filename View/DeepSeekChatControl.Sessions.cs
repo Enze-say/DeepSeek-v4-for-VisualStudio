@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 
@@ -121,12 +122,10 @@ namespace DeepSeek_v4_for_VisualStudio.View
         {
             try
             {
-                if (_apiService == null) return;
+                if (_activeAgent == null) return;
                 if (_activeSession == null) return;
                 if (_activeSession.Title != LocalizationService.Instance["session.new"]) return;
 
-                // RAG-MARK: no-truncate — 不再截断对话内容，完整传递给 AI 生成标题
-                // RAG-SOURCE: conversation-history 对话首条消息（用于生成会话标题）
                 string userSnippet = firstUserMessage;
                 string assistantSnippet = firstAssistantReply;
 
@@ -138,7 +137,8 @@ namespace DeepSeek_v4_for_VisualStudio.View
                 };
 
                 Logger.Info("[AI标题] 正在调用 API 生成标题…");
-                string title = await _apiService.CompleteAsync(messages);
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                string title = await _activeAgent.CallAiWithMessagesAsync(messages, cts.Token, maxTokens: 128, temperature: 0.3);
 
                 if (!string.IsNullOrWhiteSpace(title))
                 {

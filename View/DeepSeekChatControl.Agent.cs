@@ -978,12 +978,10 @@ namespace DeepSeek_v4_for_VisualStudio.View
         /// </summary>
         private async Task AutoRecordMemoryAsync(string userMessage, string assistantResponse)
         {
-            if (_apiService == null || _memoryService == null) return;
+            if (_activeAgent == null || _memoryService == null) return;
 
             try
             {
-                // ── 构建轻量级记忆判断提示 ──
-                // 遵循 DeepSeek JSON Output 规范：prompt 中必须含 "json" 字样 + JSON 样例
                 var systemPrompt = AiPrompts.MemoryAutoRecordSystemPrompt;
 
                 var userPrompt = string.Format(AiPrompts.MemoryAutoRecordUserPrompt,
@@ -995,7 +993,8 @@ namespace DeepSeek_v4_for_VisualStudio.View
                     new ChatApiMessage { Role = "user", Content = userPrompt },
                 };
 
-                var rawResponse = await _apiService.CompleteAsync(messages, CancellationToken.None, responseFormat: "json_object");
+                var rawResponse = await _activeAgent.CallAiWithMessagesAsync(
+                    messages, CancellationToken.None, responseFormat: "json_object", temperature: 0.0);
 
                 if (string.IsNullOrWhiteSpace(rawResponse))
                 {

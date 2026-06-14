@@ -443,7 +443,7 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
         /// 使用预构建消息列表调用 AI（支持 toolChoice 和 temperature 参数）。
         /// 🔑 始终传入完整工具集 + toolChoice="none" 以保持 Prefix Cache 稳定。
         /// </summary>
-        protected async Task<string> CallAiWithMessagesAsync(
+        public async Task<string> CallAiWithMessagesAsync(
             List<ChatApiMessage> messages,
             CancellationToken ct,
             int maxTokens = 4096,

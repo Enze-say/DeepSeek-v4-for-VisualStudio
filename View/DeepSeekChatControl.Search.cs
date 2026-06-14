@@ -27,11 +27,9 @@ namespace DeepSeek_v4_for_VisualStudio.View
         [RagSource("file-read", "搜索优化：读取附件内容用于提取关键信息")]
         private async Task<string?> ExtractKeyInfoForSearchAsync(string fileContent, string userQuestion, CancellationToken ct)
         {
-            if (_apiService == null || string.IsNullOrWhiteSpace(fileContent))
+            if (_activeAgent == null || string.IsNullOrWhiteSpace(fileContent))
                 return null;
 
-            // RAG-MARK: no-truncate — 不再截断文件内容，完整传递给 AI 提取关键信息
-            // RAG-SOURCE: file-read 用户上传的附件文件内容（用于搜索优化）
             var extractionPrompt = AiPrompts.BuildFileExtractionPrompt(userQuestion, fileContent);
 
             try
@@ -43,7 +41,7 @@ namespace DeepSeek_v4_for_VisualStudio.View
                 };
 
                 Logger.Info("开始从附件提取关键信息用于搜索优化");
-                var rawResponse = await _apiService.CompleteAsync(extractionMessages, ct);
+                var rawResponse = await _activeAgent.CallAiWithMessagesAsync(extractionMessages, ct);
                 Logger.Info($"附件关键信息提取原始响应: {rawResponse}");
 
                 string result = rawResponse?.Trim() ?? string.Empty;
@@ -75,12 +73,9 @@ namespace DeepSeek_v4_for_VisualStudio.View
         /// </summary>
         private async Task<SearchQueryOptimization?> OptimizeSearchQueryAsync(string userQuery, CancellationToken ct, bool isBaiduSearch = true)
         {
-            if (_apiService == null)
+            if (_activeAgent == null)
                 return null;
 
-            // ── 构建优化提示词 ──
-            // RAG-MARK: no-truncate — 不再截断对话上下文，完整传递给搜索优化
-            // RAG-SOURCE: conversation-history 对话历史上下文（用于搜索优化）
             string contextSummary = string.Empty;
             var history = _contextManager.GetConversationHistory();
             if (history.Count > 1)
@@ -110,7 +105,7 @@ namespace DeepSeek_v4_for_VisualStudio.View
                 };
 
                 Logger.Info($"开始 AI 搜索词优化 ({(isBaiduSearch ? "百度" : "DuckDuckGo")})，原始查询: \"{userQuery}\"");
-                var rawResponse = await _apiService.CompleteAsync(optimizationMessages, ct,
+                var rawResponse = await _activeAgent.CallAiWithMessagesAsync(optimizationMessages, ct,
                     responseFormat: isBaiduSearch ? "json_object" : null);
                 Logger.Info($"AI 搜索词优化原始响应: {rawResponse}");
 

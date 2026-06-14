@@ -89,9 +89,10 @@ namespace DeepSeek_v4_for_VisualStudio.View
                     AutoCompressEnabled = _options.EnableAutoCompression,
                 };
 
-                // 当 API 服务可用时，使用 LLM 摘要；否则使用本地规则提取
-                if (_apiService != null)
+                // 当 Agent 可用时，使用 LLM 摘要；否则使用本地规则提取
+                if (_activeAgent != null)
                 {
+                    var agent = _activeAgent; // 捕获引用，避免后续变更
                     _compressorService = new ContextCompressorService(
                         async (text, ct) =>
                         {
@@ -101,12 +102,12 @@ namespace DeepSeek_v4_for_VisualStudio.View
                                 {
                                     new ChatApiMessage { Role = "user", Content = text }
                                 };
-                                return await _apiService.CompleteAsync(messages, ct);
+                                return await agent.CallAiWithMessagesAsync(messages, ct);
                             }
                             catch (Exception ex)
                             {
                                 Logger.Warn($"[ContextCompressor] LLM 摘要失败，回退到本地提取: {ex.Message}");
-                                return string.Empty; // 返回空将触发回退
+                                return string.Empty;
                             }
                         },
                         compressionConfig);
