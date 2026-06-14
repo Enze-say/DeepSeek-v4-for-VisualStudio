@@ -161,8 +161,11 @@ namespace DeepSeek_v4_for_VisualStudio.Services.EditTools
                 // ── FuzzMerge: 行缺少有效前缀（AI 偶尔漏写 -/+/空格）──
                 // 参考: parser.ts peek_next_section 的 tolerate invalid lines 逻辑
                 // 当作上下文行处理，确保 patch 不因格式小错而中断
+                // 注意：如果 AI 本意是 + 行但漏了前缀，此行会从插入行变为上下文行，
+                // 可能导致编辑内容静默丢失。记录告警以便后续诊断。
                 else if (currentHunk != null && !string.IsNullOrWhiteSpace(line))
                 {
+                    Logger.Warn($"[FuzzMerge] Hunk 中的行缺少有效前缀（-/+/空格），已当作上下文行: \"{line.Trim().Truncate(80)}\"");
                     currentHunk.Lines.Add(new PatchLine
                     {
                         Type = ' ',
@@ -351,6 +354,17 @@ namespace DeepSeek_v4_for_VisualStudio.Services.EditTools
                         fileLines, hunkMarkers, searchStartLine);
                     if (markerMatch >= 0)
                     {
+                        // ── 验证标记匹配位置的结构合理性 ──
+                        // 如果标记匹配位置距 searchStartLine 超过 100 行，可能是误匹配
+                        if (markerMatch > searchStartLine + 100 && hunkMarkers.Count > 0)
+                        {
+                            // 尝试在 searchStartLine 附近重新搜索
+                            int nearbyMatch = EditStringMatcher.MatchContextViaMarkers(
+                                fileLines, hunkMarkers, Math.Max(0, searchStartLine - 20));
+                            if (nearbyMatch >= 0 && nearbyMatch <= searchStartLine + 100)
+                                markerMatch = nearbyMatch;
+                        }
+
                         // 插入到标记行之后（+1），因为标记行本身不应被覆盖
                         chunk.OrigIndex += markerMatch + 1;
                         searchStartLine = markerMatch + 1;
@@ -543,15 +557,15 @@ namespace DeepSeek_v4_for_VisualStudio.Services.EditTools
         }
 
         /// <summary>
-        /// 移除 InsLines 尾部与原始文件后置上下文重复的闭合符号。
-        /// 
+        /// 移除 InsLines 中与原始文件后置上下文重复的闭合符号。
+        ///
         /// ReconstructFile 会保留原始文件的后续上下文行。如果 AI 在 + 行中包含了
         /// } ) ] 等闭合符号，而这些符号在原始文件的后置上下文中已存在且将被保留，
         /// 就会产生重复闭合符号（如 }} 或 )); 等）。
-        /// 
+        ///
         /// 此方法在上下文匹配完成后（已知 chunk.OrigIndex 的精确位置），
-        /// 将 InsLines 尾部的闭合符号与原始文件将被保留的行逐行对比，
-        /// 移除重复的闭合符号。
+        /// 从 InsLines 尾部向前扫描闭合符号行（跳过空行/空白行），
+        /// 与原始文件将被保留的后置上下文逐行对比，移除匹配的重复项。
         /// </summary>
         /// <param name="chunk">已匹配定位的 FileChunk</param>
         /// <param name="fileLines">原始文件行数组</param>
@@ -560,36 +574,56 @@ namespace DeepSeek_v4_for_VisualStudio.Services.EditTools
             if (chunk.InsLines.Count == 0)
                 return;
 
-            // 原始文件中，被保留的后置上下文起始位置
             int postChangeStart = chunk.OrigIndex + chunk.DelLines.Count;
             if (postChangeStart >= fileLines.Length)
                 return;
 
-            // 从 InsLines 尾部向前遍历，统计连续闭合符号
-            int removeCount = 0;
-            for (int i = chunk.InsLines.Count - 1, origOffset = 0;
-                 i >= 0 && (postChangeStart + origOffset) < fileLines.Length;
-                 i--, origOffset++)
+            // ── 从 InsLines 尾部向前收集闭合符号行（跳过空行/空白行）──
+            // 构建 (insIndex, closingLine) 列表，按 insIndex 升序（从尾到头收集后反转）
+            var closingEntries = new List<(int insIndex, string closingLine)>();
+            for (int i = chunk.InsLines.Count - 1; i >= 0; i--)
             {
-                string insLine = chunk.InsLines[i];
-                if (!IsClosingToken(insLine))
-                    break;
-
-                string origLine = fileLines[postChangeStart + origOffset];
-                if (string.Equals(insLine.Trim(), origLine.Trim(), StringComparison.Ordinal))
-                {
-                    removeCount++;
-                }
+                string line = chunk.InsLines[i];
+                if (string.IsNullOrWhiteSpace(line))
+                    continue; // 跳过空行/空白行，继续向上扫描
+                if (IsClosingToken(line))
+                    closingEntries.Add((i, line.Trim()));
                 else
-                {
-                    // 闭合符号不匹配 → 此符号是 AI 有意添加的，保留
-                    break;
-                }
+                    break; // 遇到非闭合符号的非空行 → 停止（保护实质性代码）
+            }
+            closingEntries.Reverse(); // 恢复为从上到下的顺序
+
+            if (closingEntries.Count == 0)
+                return;
+
+            // ── 与原始文件后置上下文逐行对比 ──
+            int removeCount = 0;
+            for (int j = 0; j < closingEntries.Count && (postChangeStart + j) < fileLines.Length; j++)
+            {
+                string origLine = fileLines[postChangeStart + j].Trim();
+                if (string.IsNullOrWhiteSpace(origLine))
+                    continue; // 原始文件也是空行，跳过继续对比
+
+                if (string.Equals(closingEntries[j].closingLine, origLine, StringComparison.Ordinal))
+                    removeCount++;
+                else
+                    break; // 不匹配 → 后续的闭合符号是 AI 有意添加的，停止
             }
 
+            // ── 从尾部移除匹配的闭合符号行 ──
             if (removeCount > 0)
             {
-                chunk.InsLines.RemoveRange(chunk.InsLines.Count - removeCount, removeCount);
+                // 只移除尾部连续匹配的闭合符号行（保留中间不匹配的）
+                var indicesToRemove = new HashSet<int>();
+                for (int j = 0; j < removeCount; j++)
+                    indicesToRemove.Add(closingEntries[j].insIndex);
+
+                // 从后向前移除，避免索引偏移
+                for (int i = chunk.InsLines.Count - 1; i >= 0; i--)
+                {
+                    if (indicesToRemove.Contains(i))
+                        chunk.InsLines.RemoveAt(i);
+                }
             }
         }
 
@@ -606,14 +640,19 @@ namespace DeepSeek_v4_for_VisualStudio.Services.EditTools
         }
 
         /// <summary>
-        /// 检查 @@ 标记文本是否出现在匹配位置附近（±MarkerSearchWindow 行内）。
+        /// 检查 @@ 标记文本是否出现在匹配位置附近。
         /// 用于验证上下文匹配结果是否与标记一致，防止在错误位置匹配。
+        /// 搜索窗口与上下文长度成正比（最少 10 行，最多 50 行），避免长上下文时窗口不足。
         /// </summary>
         internal static bool IsMarkerNearPosition(
             string[] fileLines, List<string> contextMarkers,
-            int matchedLine, int contextLength, int searchWindow = 10)
+            int matchedLine, int contextLength, int searchWindow = -1)
         {
             if (contextMarkers == null || contextMarkers.Count == 0) return true; // 无标记 → 不校验
+
+            // 自适应窗口：与上下文长度成正比，最少 10 行，最多 50 行
+            if (searchWindow < 0)
+                searchWindow = Math.Max(10, Math.Min(50, contextLength + 5));
 
             int windowStart = Math.Max(0, matchedLine - searchWindow);
             int windowEnd = Math.Min(fileLines.Length, matchedLine + contextLength + searchWindow);
@@ -638,10 +677,10 @@ namespace DeepSeek_v4_for_VisualStudio.Services.EditTools
         /// 文件重建：遍历原始行，按 Chunk 列表删除旧行、插入新行。
         /// 保留原始文件的尾部空行数。
         /// 参考: parser.ts _get_updated_file + applyPatchTool.tsx trailing empty line preservation
-        /// 
+        ///
         /// 重叠处理：当多个 Chunk 的 [OrigIndex, OrigIndex+DelLines) 区间重叠时，
-        /// 合并为一组处理 — 取最大删除行数、拼接所有插入行。这解决了 AI 生成多个
-        /// Hunk 时因共享上下文行导致的坐标重叠问题。
+        /// 合并为一组处理 — 计算删除区间的并集（union），在每个 Chunk 的相对偏移处
+        /// 交织插入其 InsLines。原始区间内的所有行均被跳过。
         /// </summary>
         internal static string ReconstructFile(string[] originalLines, List<FileChunk> chunks)
         {
@@ -698,17 +737,39 @@ namespace DeepSeek_v4_for_VisualStudio.Services.EditTools
                 {
                     destLines.AddRange(originalLines.Skip(origIdx).Take(firstChunk.OrigIndex - origIdx));
                 }
-                origIdx = firstChunk.OrigIndex;
 
-                // 计算组合效果：取最大删除行数，拼接所有插入行
-                int maxDel = 0;
-                foreach (var c in group)
-                    maxDel = Math.Max(maxDel, c.DelLines.Count);
+                if (group.Count == 1)
+                {
+                    // ── 单 Chunk 快速路径 ──
+                    destLines.AddRange(group[0].InsLines);
+                    origIdx = group[0].OrigIndex + group[0].DelLines.Count;
+                }
+                else
+                {
+                    // ── 多 Chunk 重叠组：计算删除区间并集，按偏移量交织插入 ──
+                    int delStart = group.Min(c => c.OrigIndex);
+                    int delEnd = group.Max(c => c.OrigIndex + c.DelLines.Count);
 
-                foreach (var c in group)
-                    destLines.AddRange(c.InsLines);
+                    // 构建插入映射：相对偏移 → 待插入行列表（保留各 chunk 插入顺序）
+                    var insertMap = new SortedDictionary<int, List<string>>();
+                    foreach (var c in group)
+                    {
+                        int offset = c.OrigIndex - delStart;
+                        if (!insertMap.ContainsKey(offset))
+                            insertMap[offset] = new List<string>();
+                        insertMap[offset].AddRange(c.InsLines);
+                    }
 
-                origIdx += maxDel;
+                    // 遍历删除区间，在每个偏移量处交织插入
+                    for (int i = 0; i < delEnd - delStart; i++)
+                    {
+                        if (insertMap.TryGetValue(i, out var insLines))
+                            destLines.AddRange(insLines);
+                        // 删除区间内的原始行全部跳过（union 语义）
+                    }
+
+                    origIdx = delEnd;
+                }
             }
 
             // 复制尾部剩余行
@@ -749,6 +810,9 @@ namespace DeepSeek_v4_for_VisualStudio.Services.EditTools
         /// <summary>
         /// 缩进适配：将 AI 输出的缩进调整为与目标文件一致。
         /// 参考: parser.ts computeIndentLevel2 + transformIndentation + additionalIndentation
+        ///
+        /// 缩进单位统一：检测目标文件的缩进风格（tab 或 space），按同一种单位计算
+        /// delta 并应用。避免 tab 按 4-space 换算后直接用 tab 字符重复导致过度缩进。
         /// </summary>
         internal static void AdaptChunkIndentation(
             FileChunk chunk, string[] contextLines, string[] fileLines, int matchedLine)
@@ -756,23 +820,25 @@ namespace DeepSeek_v4_for_VisualStudio.Services.EditTools
             if (chunk.InsLines.Count == 0 || contextLines.Length == 0 || matchedLine >= fileLines.Length)
                 return;
 
+            // ── 检测目标文件的缩进风格 ──
+            bool targetUsesTabs = DetectFileIndentStyle(fileLines, matchedLine);
+            string indentUnit = targetUsesTabs ? "\t" : " ";
+
             // ── 计算 AI 输出的缩进层级（基于第一个上下文行）──
             string firstCtx = contextLines[0];
-            int srcIndent = GetIndentLevel(firstCtx);
+            int srcIndent = GetIndentLevel(firstCtx, targetUsesTabs);
 
             // ── 计算目标文件的缩进层级（基于匹配行）──
             string matchedFileLine = fileLines[matchedLine];
-            int targetIndent = GetIndentLevel(matchedFileLine);
+            int targetIndent = GetIndentLevel(matchedFileLine, targetUsesTabs);
 
-            // ── 缩进差值：目标比 AI 多出的缩进量 ──
+            // ── 缩进差值（统一单位：tab 或 space）──
             int indentDelta = targetIndent - srcIndent;
-            if (indentDelta <= 0) return; // AI 缩进已足够或更多
+            if (indentDelta <= 0) return;
 
-            // ── 推断缩进字符（空格 vs 制表符）──
-            string indentChar = GetIndentChar(matchedFileLine);
-            string additionalIndent = new string(indentChar[0], indentDelta);
+            // ── 使用目标文件的缩进单位构建附加缩进 ──
+            string additionalIndent = new string(indentUnit[0], indentDelta);
 
-            // ── 对每个插入行增加缩进 ──
             for (int i = 0; i < chunk.InsLines.Count; i++)
             {
                 if (!string.IsNullOrWhiteSpace(chunk.InsLines[i]))
@@ -781,15 +847,38 @@ namespace DeepSeek_v4_for_VisualStudio.Services.EditTools
         }
 
         /// <summary>
-        /// 计算行的缩进级别（空格数，制表符按4空格计）。
+        /// 检测目标文件在匹配位置附近的缩进风格（tab 优先）。
+        /// 扫描匹配行及其附近的非空行，统计首字符是 tab 还是 space。
         /// </summary>
-        internal static int GetIndentLevel(string line)
+        internal static bool DetectFileIndentStyle(string[] fileLines, int matchedLine)
+        {
+            int start = Math.Max(0, matchedLine - 5);
+            int end = Math.Min(fileLines.Length, matchedLine + 10);
+            int tabCount = 0, spaceCount = 0;
+
+            for (int i = start; i < end; i++)
+            {
+                string line = fileLines[i];
+                if (string.IsNullOrEmpty(line)) continue;
+                if (line[0] == '\t') tabCount++;
+                else if (line[0] == ' ') spaceCount++;
+            }
+
+            // 有 tab 的行数 >= 有 space 的行数 → 判定为 tab 风格
+            return tabCount >= spaceCount && tabCount > 0;
+        }
+
+        /// <summary>
+        /// 计算行的缩进级别。tabAsSpace: true 时制表符计为 1（tab 单位），
+        /// false 时制表符按 4 空格计（传统行为）。
+        /// </summary>
+        internal static int GetIndentLevel(string line, bool tabAsSpace = false)
         {
             int level = 0;
             foreach (char c in line)
             {
                 if (c == ' ') level++;
-                else if (c == '\t') level += 4;
+                else if (c == '\t') level += tabAsSpace ? 1 : 4;
                 else break;
             }
             return level;

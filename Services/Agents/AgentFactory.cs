@@ -118,6 +118,10 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
             _builtInToolService = builtInToolService;
             _mcpManager = mcpManager;
             _memoryService = memoryService;
+
+            // ── 注入 ApiService 到 BuiltInToolService 以启用 apply_patch Healing ──
+            if (_builtInToolService != null)
+                _builtInToolService.ApiService = _apiService;
         }
 
         /// <summary>

@@ -24,6 +24,7 @@ namespace DeepSeek_v4_for_VisualStudio.Services
         private readonly WebSearchService? _webSearchService;
         private readonly IBuildService? _buildService;
         private readonly IMemoryService? _memoryService;
+        private DeepSeekApiService? _apiService;
 
         // ── 文件读取缓存：同一会话内相同路径只从磁盘读取一次 ──
         // 缓存条目包含内容 + 上次读取轮次，支持基于轮数的缓存过期
@@ -117,6 +118,28 @@ namespace DeepSeek_v4_for_VisualStudio.Services
         {
             if (_tools.TryGetValue("read_file", out var tool) && tool is ReadFileTool rft)
                 rft.ActiveFileTracker = _activeFileTracker;
+        }
+
+        /// <summary>
+        /// 将 ApiService 同步到需要 Healing 功能的工具实例。
+        /// </summary>
+        private void SyncApiServiceToTools()
+        {
+            if (_tools.TryGetValue("apply_patch", out var tool) && tool is BuiltInTools.ApplyPatchTool apt)
+                apt.ApiService = _apiService;
+        }
+
+        /// <summary>
+        /// API 服务引用（可选注入）。设置后会自动同步到 ApplyPatchTool 等需要 Healing 的工具。
+        /// </summary>
+        public DeepSeekApiService? ApiService
+        {
+            get => _apiService;
+            set
+            {
+                _apiService = value;
+                SyncApiServiceToTools();
+            }
         }
 
         /// <summary>

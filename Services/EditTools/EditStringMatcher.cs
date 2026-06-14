@@ -277,6 +277,8 @@ namespace DeepSeek_v4_for_VisualStudio.Services.EditTools
 
         /// <summary>
         /// 编辑距离模糊行匹配：累计各行编辑距离不超过阈值。
+        /// 额外要求至少一半的上下文行精确匹配（距离 0），防止在结构不同但总编辑距离
+        /// 相近的代码块中产生误匹配（如重复的 getter/setter 模式）。
         /// </summary>
         private static int FuzzyLineMatch(string[] fileLines, string[] contextLines, int startLine)
         {
@@ -284,16 +286,21 @@ namespace DeepSeek_v4_for_VisualStudio.Services.EditTools
             if (maxDistance <= 0) return -1;
 
             int maxStart = fileLines.Length - contextLines.Length;
+            int minExactMatches = Math.Max(1, contextLines.Length / 2); // 至少一半行精确匹配
 
             for (int i = Math.Max(0, startLine); i <= maxStart; i++)
             {
                 int totalDistance = 0;
+                int exactMatches = 0;
                 for (int j = 0; j < contextLines.Length && totalDistance <= maxDistance; j++)
                 {
-                    totalDistance += LevenshteinDistanceExtensions.LevenshteinDistance(
+                    int dist = LevenshteinDistanceExtensions.LevenshteinDistance(
                         fileLines[i + j], contextLines[j]);
+                    totalDistance += dist;
+                    if (dist == 0) exactMatches++;
                 }
-                if (totalDistance <= maxDistance) return i;
+                if (totalDistance <= maxDistance && exactMatches >= minExactMatches)
+                    return i;
             }
             return -1;
         }
