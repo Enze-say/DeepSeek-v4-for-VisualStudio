@@ -502,6 +502,9 @@ namespace DeepSeek_v4_for_VisualStudio.Services.EditTools
             result.FinalContent = EditStringMatcher.NormalizeToCrLf(reconstructed);
             result.Success = true;
 
+            // ── 日志：记录应用前后的内容（前后各 10 行上下文）──
+            LogAppliedChanges(filePath, fileContent, result.FinalContent, result.AppliedEdits);
+
             return result;
         }
 
@@ -935,6 +938,10 @@ namespace DeepSeek_v4_for_VisualStudio.Services.EditTools
 
             result.FinalContent = EditStringMatcher.NormalizeToCrLf(sb.ToString());
             result.Success = true;
+
+            // ── 日志：记录新建文件的内容 ──
+            Logger.LogToFile("applypatch", $"[ApplyPatch] ✨ 新建文件: {filePath}\n内容 ({result.FinalContent.Length} 字符):\n{GetTruncatedContent(result.FinalContent, 20)}");
+
             return result;
         }
 
@@ -950,6 +957,14 @@ namespace DeepSeek_v4_for_VisualStudio.Services.EditTools
             {
                 if (File.Exists(filePath))
                 {
+                    // ── 日志：记录删除前的文件内容（前 20 行）──
+                    try
+                    {
+                        string beforeContent = File.ReadAllText(filePath);
+                        Logger.LogToFile("applypatch", $"[ApplyPatch] 🗑️ 删除文件: {filePath}\n删除前内容（前20行）:\n{GetTruncatedContent(beforeContent, 20)}");
+                    }
+                    catch { /* 读取失败不影响主流程 */ }
+
                     File.Delete(filePath);
                     result.Success = true;
                 }
@@ -994,6 +1009,9 @@ namespace DeepSeek_v4_for_VisualStudio.Services.EditTools
 
                 File.Move(sourcePath, destPath);
                 result.Success = true;
+
+                // ── 日志：记录移动操作 ──
+                Logger.LogToFile("applypatch", $"[ApplyPatch] 📁 移动文件: {sourcePath} → {destPath}");
             }
             catch (Exception ex)
             {
@@ -1099,6 +1117,83 @@ namespace DeepSeek_v4_for_VisualStudio.Services.EditTools
                     Logger.Warn($"[Transaction] 回滚失败: {kvp.Key} — {ex.Message}（备份文件已保留，请手动恢复）");
                 }
             }
+        }
+
+        #endregion
+
+        #region ApplyPatch 日志
+
+        /// <summary>
+        /// 记录补丁应用前后的文件内容（前后各 10 行上下文）。
+        /// </summary>
+        private static void LogAppliedChanges(string filePath, string beforeContent, string afterContent,
+            List<TextEditOperation> appliedEdits)
+        {
+            try
+            {
+                if (appliedEdits == null || appliedEdits.Count == 0)
+                {
+                    Logger.LogToFile("applypatch", $"[ApplyPatch] ✅ 已应用补丁: {Path.GetFileName(filePath)}（无编辑点详情）");
+                    return;
+                }
+
+                // ── 计算编辑区域的行范围 ──
+                int minLine = int.MaxValue;
+                int maxLine = int.MinValue;
+                foreach (var edit in appliedEdits)
+                {
+                    if (edit.StartLine < minLine) minLine = edit.StartLine;
+                    if (edit.EndLine > maxLine) maxLine = edit.EndLine;
+                }
+                if (minLine == int.MaxValue || maxLine == int.MinValue) return;
+
+                var beforeLines = beforeContent.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+                var afterLines = afterContent.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+
+                int contextBefore = 10;
+                int contextAfter = 10;
+                int beforeStart = Math.Max(0, minLine - contextBefore);
+                int beforeEnd = Math.Min(beforeLines.Length - 1, maxLine + contextAfter);
+                int afterStart = Math.Max(0, minLine - contextBefore);
+                int afterEnd = Math.Min(afterLines.Length - 1, maxLine + contextAfter);
+
+                var sb = new StringBuilder();
+                sb.AppendLine($"[ApplyPatch] 📄 {Path.GetFileName(filePath)} 修改区域 (编辑点={appliedEdits.Count}, 行 {minLine + 1}-{maxLine + 1}):");
+
+                // ── 修改前 ──
+                sb.AppendLine($"  ── 修改前 (行 {beforeStart + 1}-{beforeEnd + 1}/{beforeLines.Length}) ──");
+                for (int i = beforeStart; i <= beforeEnd && i < beforeLines.Length; i++)
+                {
+                    string marker = (i >= minLine && i <= maxLine) ? "◀" : " ";
+                    sb.AppendLine($"  {marker} {i + 1,5}: {beforeLines[i]}");
+                }
+
+                // ── 修改后 ──
+                sb.AppendLine($"  ── 修改后 (行 {afterStart + 1}-{afterEnd + 1}/{afterLines.Length}) ──");
+                for (int i = afterStart; i <= afterEnd && i < afterLines.Length; i++)
+                {
+                    string marker = (i >= minLine && i <= maxLine) ? "◀" : " ";
+                    sb.AppendLine($"  {marker} {i + 1,5}: {afterLines[i]}");
+                }
+
+                Logger.LogToFile("applypatch", sb.ToString());
+            }
+            catch (Exception ex)
+            {
+                Logger.LogToFile("applypatch", $"[ApplyPatch] 记录应用变更时出错: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// 截断内容用于日志输出（取前 N 行，超长则标注）。
+        /// </summary>
+        private static string GetTruncatedContent(string content, int maxLines)
+        {
+            if (string.IsNullOrEmpty(content)) return "(空)";
+            var lines = content.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
+            if (lines.Length <= maxLines)
+                return content;
+            return string.Join("\n", lines.Take(maxLines)) + $"\n... [截断，共 {lines.Length} 行]";
         }
 
         #endregion

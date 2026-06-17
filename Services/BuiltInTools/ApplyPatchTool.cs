@@ -69,12 +69,18 @@ namespace DeepSeek_v4_for_VisualStudio.Services.BuiltInTools
             if (string.IsNullOrEmpty(patchText))
                 return LocalizationService.Instance["tool.applyPatch.missingParam"];
 
+            // ── 日志：原始补丁内容 ──
+            LogRawPatchContent(patchText);
+
             workspaceRoot = NormalizeWorkspaceRoot(workspaceRoot);
 
             try
             {
                 // ── 统一使用 EditTools 版的解析器（OpenAI Codex 兼容，正则前缀检测）──
                 var patches = EditTools.ApplyPatchTool.ParsePatches(patchText);
+
+                // ── 日志：解析后的补丁详情 ──
+                LogParsedPatches(patches, patchText);
 
                 if (patches.Count == 0)
                 {
@@ -191,5 +197,48 @@ namespace DeepSeek_v4_for_VisualStudio.Services.BuiltInTools
                 return LocalizationService.Instance.Format("tool.applyPatch.failed", ex.Message);
             }
         }
+
+        #region ApplyPatch 日志
+
+        /// <summary>
+        /// 记录原始补丁内容（截断过长内容）。
+        /// </summary>
+        private static void LogRawPatchContent(string patchText)
+        {
+            const int maxLogLength = 4000;
+            string display = patchText.Length > maxLogLength
+                ? patchText.Substring(0, maxLogLength) + $"\n... [截断，总长度 {patchText.Length} 字符]"
+                : patchText;
+            Logger.LogToFile("applypatch", $"[ApplyPatch] 📝 原始补丁内容 ({patchText.Length} 字符):\n{display}");
+        }
+
+        /// <summary>
+        /// 记录解析后的补丁详情（每个 Patch 的文件、操作类型、Hunk 数）。
+        /// </summary>
+        private static void LogParsedPatches(List<PatchOperation> patches, string rawPatchText)
+        {
+            if (patches.Count == 0)
+            {
+                Logger.LogToFile("applypatch", $"[ApplyPatch] ⚠️ 未能从补丁文本中解析出任何 Patch 操作。原始文本长度: {rawPatchText.Length}");
+                return;
+            }
+
+            Logger.LogToFile("applypatch", $"[ApplyPatch] 📋 解析出 {patches.Count} 个 Patch 操作:");
+            for (int i = 0; i < patches.Count; i++)
+            {
+                var p = patches[i];
+                string actionLabel = p.Action switch
+                {
+                    Models.PatchFileAction.Add => "Add  File",
+                    Models.PatchFileAction.Delete => "Del  File",
+                    Models.PatchFileAction.Update => "Update",
+                    _ => p.Action.ToString()
+                };
+                string moveInfo = !string.IsNullOrEmpty(p.MoveToPath) ? $" → {p.MoveToPath}" : "";
+                Logger.LogToFile("applypatch", $"[ApplyPatch]   [{i + 1}] {actionLabel}: {p.FilePath}{moveInfo} | {p.Hunks.Count} hunks | raw={p.RawText.Length}chars");
+            }
+        }
+
+        #endregion
     }
 }

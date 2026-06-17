@@ -249,5 +249,24 @@ namespace DeepSeek_v4_for_VisualStudio.Utils
                 // 清理失败不影响日志写入
             }
         }
+
+        /// <summary>
+        /// 写入独立日志文件（用于专题日志如 applypatch）。不受 LogLevel 控制。
+        /// 文件位于 LogDirectory，按日期命名：{fileNamePrefix}-{yyyy-MM-dd}.log。
+        /// </summary>
+        /// <param name="fileNamePrefix">文件名前缀（如 "applypatch"）</param>
+        /// <param name="message">日志内容（自动追加时间戳和换行）</param>
+        public static void LogToFile(string fileNamePrefix, string message)
+        {
+            try
+            {
+                EnsureLogDirectory();
+                string date = DateTime.Now.ToString("yyyy-MM-dd");
+                string filePath = Path.Combine(LogDirectory, $"{fileNamePrefix}-{date}.log");
+                string line = $"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff} {message}{Environment.NewLine}";
+                File.AppendAllText(filePath, line);
+            }
+            catch { /* 写入失败不影响主流程 */ }
+        }
     }
 }
