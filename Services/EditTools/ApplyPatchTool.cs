@@ -1414,10 +1414,7 @@ namespace DeepSeek_v4_for_VisualStudio.Services.EditTools
         private static string GetTruncatedContent(string content, int maxLines)
         {
             if (string.IsNullOrEmpty(content)) return "(空)";
-            var lines = content.Split(new[] { "\r\n", "\n" }, StringSplitOptions.None);
-            if (lines.Length <= maxLines)
-                return content;
-            return string.Join("\n", lines.Take(maxLines)) + $"\n... [截断，共 {lines.Length} 行]";
+            return content;
         }
 
         #endregion

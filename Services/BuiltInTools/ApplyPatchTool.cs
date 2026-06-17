@@ -205,11 +205,7 @@ namespace DeepSeek_v4_for_VisualStudio.Services.BuiltInTools
         /// </summary>
         private static void LogRawPatchContent(string patchText)
         {
-            const int maxLogLength = 4000;
-            string display = patchText.Length > maxLogLength
-                ? patchText.Substring(0, maxLogLength) + $"\n... [截断，总长度 {patchText.Length} 字符]"
-                : patchText;
-            Logger.LogToFile("applypatch", $"[ApplyPatch] 📝 原始补丁内容 ({patchText.Length} 字符):\n{display}");
+            Logger.LogToFile("applypatch", $"[ApplyPatch] 📝 原始补丁内容 ({patchText.Length} 字符):\n{patchText}");
         }
 
         /// <summary>
