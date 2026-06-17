@@ -295,6 +295,9 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
             context.CodeMemory = null;
             context.AccumulatedContext = null;
 
+            // ── v1.1.11: 清理上一次计划的步骤摘要记忆文件，防止新旧摘要混在一起 ──
+            await ClearPreviousPlanMemoryAsync(context);
+
             // ═══════════════════════════════════════════════════════════════
             // 缓存策略：将 BuiltInToolService 已读取的文件同步到 AgentContext
             // 全局缓存，避免后续步骤重复 read_file（以后会被 RAG 替代）
@@ -3709,6 +3712,64 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
                 {
                     AddLog("WARN", $"[Memory] 最终计划摘要写入失败: {ex.Message}");
                 }
+            }
+        }
+
+        /// <summary>
+        /// v1.1.11: 清理上一次计划遗留的步骤摘要和最终摘要记忆文件。
+        /// 在 ExecutePlanAsync 开始时调用，防止新旧计划摘要混在一起。
+        /// </summary>
+        private async Task ClearPreviousPlanMemoryAsync(AgentContext context)
+        {
+            if (MemoryService == null) return;
+
+            try
+            {
+                string? sessionId = BuiltInTools?.CurrentSessionId;
+
+                // 清理最终摘要
+                try
+                {
+                    await MemoryService.DeleteAsync(MemoryScope.Session, "plan-final-summary.md",
+                        sessionId, context.SolutionPath);
+                }
+                catch (FileNotFoundException) { /* 不存在，无需清理 */ }
+                catch { /* 静默忽略其他错误 */ }
+
+                // 清理步骤摘要 (step-01 ~ step-99)
+                for (int i = 1; i <= 99; i++)
+                {
+                    string fileName = $"step-{i:D2}-summary.md";
+                    try
+                    {
+                        await MemoryService.DeleteAsync(MemoryScope.Session, fileName,
+                            sessionId, context.SolutionPath);
+                    }
+                    catch (FileNotFoundException)
+                    {
+                        // 连续两个文件不存在则停止（假设后续也没有）
+                        if (i > 1)
+                        {
+                            string prevFile = $"step-{(i - 1):D2}-summary.md";
+                            try
+                            {
+                                await MemoryService.ViewAsync(MemoryScope.Session, prevFile,
+                                    sessionId, context.SolutionPath);
+                            }
+                            catch (FileNotFoundException)
+                            {
+                                break; // 前一个也不存在，确认没有更多旧文件
+                            }
+                        }
+                    }
+                    catch { /* 静默忽略其他错误 */ }
+                }
+
+                AddLog("INFO", "[Memory] 已清理上一次计划的步骤摘要记忆文件");
+            }
+            catch (Exception ex)
+            {
+                AddLog("WARN", $"[Memory] 清理计划记忆文件时出错: {ex.Message}");
             }
         }
 

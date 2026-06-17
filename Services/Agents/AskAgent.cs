@@ -610,7 +610,7 @@ namespace DeepSeek_v4_for_VisualStudio.Services.Agents
             {
                 sb.AppendLine(L["edit.summary.stepDetails"]);
                 sb.AppendLine();
-                sb.AppendLine($"**{L["edit.summary.stepCount"]}**: {plan.Steps.Count(s => s.Status == AgentStepStatus.Completed)} / {plan.Steps.Count}");
+                sb.AppendLine($"**{L.Format("edit.summary.stepCount", plan.Steps.Count, plan.Steps.Count(s => s.Status == AgentStepStatus.Completed))}**");
                 sb.AppendLine();
                 foreach (var step in plan.Steps)
                 {
